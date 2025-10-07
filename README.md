@@ -87,7 +87,7 @@
 
 ## :cat:🤝 Вклад и Развитие
 
-Мы приветствуем любые идеи, предложения и помощь в развитии проекта. Пожалуйста, создавайте [Issues](https://github.com/yourusername/pdm-hackathon-nanobanano/issues) для ошибок или предложений, и [Pull Requests](https://github.com/yourusername/pdm-hackathon-nanobanano/pulls) для внесения изменений.
+Мы приветствуем любые идеи, предложения и помощь в развитии проекта. Пожалуйста, создавайте [Issues](https://github.com/Pandoriki/predictive-diagnostics-of-industrial-equipment/issues) для ошибок или предложений, и [Pull Requests](https://github.com/Pandoriki/predictive-diagnostics-of-industrial-equipment/pulls) для внесения изменений.
 
 ## :cat:📄 Лицензия
 
