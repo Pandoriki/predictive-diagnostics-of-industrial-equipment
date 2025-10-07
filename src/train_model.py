@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 import numpy as np
 import random
 import os
@@ -13,7 +13,7 @@ from configs.config import cfg
 from src.data_preprocessing import load_data, calculate_rul_for_train, preprocess_features, \
                                     generate_sequences, generate_test_sequences_for_prediction
 from src.model_architecture import RULFilterNet
-from src.dataset import RULDataset
+from src.dataset import RULDataset, AddGaussianNoise
 from src.predict_utils import get_rul_status
 
 def set_seed(seed: int):
@@ -36,7 +36,7 @@ def train_model():
     print("Расчет RUL для тренировочного набора...")
     df_train_with_rul = calculate_rul_for_train(df_train_raw, cfg.RUL_CAP)
 
-    print("Предварительная обработка признаков (фильтрация, масштабирование)...")
+    print("Предварительная обработка признаков (фильтрация, масштабирование, FFT)...")
     df_train_processed, df_test_processed, scaler, selected_features = \
         preprocess_features(df_train_with_rul.copy(), df_test_raw.copy(),
                             fit_scaler=True, 
@@ -59,11 +59,16 @@ def train_model():
     X_train, X_val, y_train, y_val = train_test_split(
         X_train_sequences, y_train_sequences, test_size=cfg.VALIDATION_SPLIT, random_state=cfg.RANDOM_SEED
     )
-    
+
     train_loader, val_loader = RULDataset.create_dataloaders(
-        X_train, y_train, X_val, y_val, cfg.BATCH_SIZE
+        X_train, y_train, X_val, y_val, 
+        cfg.BATCH_SIZE, 
+        use_augmentation=cfg.USE_DATA_AUGMENTATION
     )
     print(f"Размер тренировочного набора: {len(X_train)}, валидационного: {len(X_val)}")
+    if cfg.USE_DATA_AUGMENTATION:
+        print(f"Аугментация данных Включена (Гауссов шум с noise_factor={cfg.AUGMENTATION_NOISE_FACTOR}).")
+
 
     print("Инициализация модели RULFilterNet...")
     input_channels = X_train_sequences.shape[2] 
@@ -115,7 +120,7 @@ def train_model():
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             torch.save(model.state_dict(), os.path.join(cfg.MODELS_DIR, 'rul_prediction_model.pth'))
-            print("Лучшая модель сохранена.")
+            print("--- Лучшая модель сохранена! ---")
 
     print("\nОбучение завершено.")
 

@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from scipy.signal import butter, filtfilt
+from scipy.fft import fft, fftfreq 
 import os
 import joblib
 
@@ -35,6 +36,53 @@ def calculate_rul_for_train(df_train: pd.DataFrame, rul_cap: int = cfg.RUL_CAP) 
     
     return df_train
 
+def _apply_fft_features(df: pd.DataFrame, vibration_sensor_names: list, fft_bins: int) -> pd.DataFrame:
+    if not vibration_sensor_names:
+        return df
+
+    all_units_with_fft = []
+    
+    for unit_id in df['unit_number'].unique():
+        unit_subset = df[df['unit_number'] == unit_id].copy()
+        
+        unit_fft_data = pd.DataFrame(index=unit_subset.index)
+        
+        for sensor_name in vibration_sensor_names:
+            if sensor_name in unit_subset.columns:
+                signal = unit_subset[sensor_name].values
+                N = len(signal)
+                
+                if N == 0: continue
+                
+                yf = fft(signal)
+                xf = fftfreq(N, 1)[:N//2]
+                amplitudes = np.abs(yf[0:N//2])
+                
+                if xf.size == 0: continue
+                
+                bin_size = xf.max() / fft_bins
+                
+                for i in range(fft_bins):
+                    low_freq = i * bin_size
+                    high_freq = (i + 1) * bin_size
+                    
+                    bin_amplitudes = amplitudes[(xf >= low_freq) & (xf < high_freq)]
+                    
+                    mean_val = np.mean(bin_amplitudes) if len(bin_amplitudes) > 0 else 0.0
+                    max_val = np.max(bin_amplitudes) if len(bin_amplitudes) > 0 else 0.0
+
+                    unit_fft_data[f'{sensor_name}_fft_bin{i}_mean'] = mean_val
+                    unit_fft_data[f'{sensor_name}_fft_bin{i}_max'] = max_val
+
+        for col in unit_fft_data.columns:
+            unit_subset[col] = unit_fft_data[col].iloc[0] 
+                                                          
+        
+        all_units_with_fft.append(unit_subset)
+
+    return pd.concat(all_units_with_fft, ignore_index=True)
+
+
 def preprocess_features(df_train: pd.DataFrame, df_test: pd.DataFrame,
                         fit_scaler: bool = True, scaler: MinMaxScaler = None,
                         scaler_save_path: str = None, features_save_path: str = None) \
@@ -60,6 +108,17 @@ def preprocess_features(df_train: pd.DataFrame, df_test: pd.DataFrame,
     
     selected_features = cfg.OP_SETTING_COLS + active_sensor_cols
     
+    fft_sensor_names_to_process = [f'sensor_{idx}' for idx in cfg.VIBRATION_SENSORS_FOR_FFT_INDICES]
+    
+    if cfg.USE_FFT_FEATURES:
+        df_train = _apply_fft_features(df_train, fft_sensor_names_to_process, cfg.FFT_BINS_COUNT)
+        df_test = _apply_fft_features(df_test, fft_sensor_names_to_process, cfg.FFT_BINS_COUNT)
+        
+        for sensor in fft_sensor_names_to_process:
+            for i in range(cfg.FFT_BINS_COUNT):
+                selected_features.append(f'{sensor}_fft_bin{i}_mean')
+                selected_features.append(f'{sensor}_fft_bin{i}_max')
+        
     if fit_scaler:
         scaler = MinMaxScaler()
         df_train[selected_features] = scaler.fit_transform(df_train[selected_features])
@@ -81,6 +140,7 @@ def generate_sequences(df: pd.DataFrame, features: list, sequence_length: int = 
     X, y = [], []
     for unit_id in df['unit_number'].unique():
         subset = df[df['unit_number'] == unit_id]
+        
         subset_rul = subset['RUL'].clip(upper=cfg.RUL_CAP)
         
         for i in range(len(subset) - sequence_length + 1):
