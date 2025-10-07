@@ -11,9 +11,10 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 from configs.config import cfg
 from src.data_preprocessing import load_data, calculate_rul_for_train, preprocess_features, \
-                                    generate_sequences, generate_test_sequences_for_prediction, get_rul_status
+                                    generate_sequences, generate_test_sequences_for_prediction
 from src.model_architecture import RULFilterNet
 from src.dataset import RULDataset
+from src.predict_utils import get_rul_status
 
 def set_seed(seed: int):
     random.seed(seed)
@@ -114,7 +115,7 @@ def train_model():
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             torch.save(model.state_dict(), os.path.join(cfg.MODELS_DIR, 'rul_prediction_model.pth'))
-            print("--- Лучшая модель сохранена! ---")
+            print("Лучшая модель сохранена.")
 
     print("\nОбучение завершено.")
 

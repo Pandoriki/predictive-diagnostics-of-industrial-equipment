@@ -27,9 +27,9 @@ def load_data(data_dir: str = cfg.DATA_RAW_DIR) -> (pd.DataFrame, pd.DataFrame, 
 
 def calculate_rul_for_train(df_train: pd.DataFrame, rul_cap: int = cfg.RUL_CAP) -> pd.DataFrame:
     max_time_per_unit = df_train.groupby('unit_number')['time_in_cycles'].max()
-    df_train = df_train.merge(max_time_per_unit.rename('max_time_in_unit_cycles'), on='unit_number', how='left')
-    df_train['RUL'] = df_train['max_time_in_unit_cycles'] - df_train['time_in_cycles']
-    df_train.drop(columns=['max_time_in_unit_cycles'], inplace=True) 
+    df_train = df_train.merge(max_time_per_unit.rename('max_cycle_in_unit'), on='unit_number', how='left')
+    df_train['RUL'] = df_train['max_cycle_in_unit'] - df_train['time_in_cycles']
+    df_train.drop(columns=['max_cycle_in_unit'], inplace=True) 
     
     df_train['RUL'] = df_train['RUL'].clip(upper=rul_cap)
     
@@ -81,7 +81,6 @@ def generate_sequences(df: pd.DataFrame, features: list, sequence_length: int = 
     X, y = [], []
     for unit_id in df['unit_number'].unique():
         subset = df[df['unit_number'] == unit_id]
-        
         subset_rul = subset['RUL'].clip(upper=cfg.RUL_CAP)
         
         for i in range(len(subset) - sequence_length + 1):
