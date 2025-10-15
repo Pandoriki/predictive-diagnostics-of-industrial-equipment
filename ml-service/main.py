@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from sklearn.preprocessing import MinMaxScaler 
 
-from configs.config import cfg
+import configs.config as cfg
 from src.model_architecture import RULFilterNet
 from src.data_preprocessing import calculate_rul_for_train, preprocess_features, load_data
 from src.predict_utils import get_rul_status

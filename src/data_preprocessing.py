@@ -6,9 +6,13 @@ from scipy.fft import fft, fftfreq
 import os
 import joblib
 
-from configs.config import cfg
+import configs.config as cfg # Используем alias, так как cfg.py содержит прямые переменные
 
-def load_data(data_dir: str = cfg.DATA_RAW_DIR) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
+
+def load_data(data_dir: str = None) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
+    if data_dir is None:
+        data_dir = cfg.DATA_RAW_DIR 
+
     column_names = ['unit_number', 'time_in_cycles', 'op_setting_1', 'op_setting_2', 'op_setting_3'] + \
                    [f'sensor_{i}' for i in range(1, 22)]
 
@@ -26,7 +30,10 @@ def load_data(data_dir: str = cfg.DATA_RAW_DIR) -> (pd.DataFrame, pd.DataFrame, 
 
     return df_train, df_test, df_rul_true
 
-def calculate_rul_for_train(df_train: pd.DataFrame, rul_cap: int = cfg.RUL_CAP) -> pd.DataFrame:
+def calculate_rul_for_train(df_train: pd.DataFrame, rul_cap: int = None) -> pd.DataFrame:
+    if rul_cap is None:
+        rul_cap = cfg.RUL_CAP
+
     max_time_per_unit = df_train.groupby('unit_number')['time_in_cycles'].max()
     df_train = df_train.merge(max_time_per_unit.rename('max_cycle_in_unit'), on='unit_number', how='left')
     df_train['RUL'] = df_train['max_cycle_in_unit'] - df_train['time_in_cycles']
@@ -74,10 +81,15 @@ def _apply_fft_features(df: pd.DataFrame, vibration_sensor_names: list, fft_bins
                     unit_fft_data[f'{sensor_name}_fft_bin{i}_mean'] = mean_val
                     unit_fft_data[f'{sensor_name}_fft_bin{i}_max'] = max_val
 
-        for col in unit_fft_data.columns:
-            unit_subset[col] = unit_fft_data[col].iloc[0] 
-                                                          
-        
+        if not unit_fft_data.empty: 
+            temp_fft_row = pd.DataFrame([unit_fft_data.iloc[0]]) 
+            temp_fft_df_reindexed = pd.DataFrame(
+                np.repeat(temp_fft_row.values, len(unit_subset), axis=0),
+                columns=temp_fft_row.columns,
+                index=unit_subset.index
+            )
+            unit_subset = pd.concat([unit_subset, temp_fft_df_reindexed], axis=1)
+
         all_units_with_fft.append(unit_subset)
 
     return pd.concat(all_units_with_fft, ignore_index=True)
@@ -85,9 +97,13 @@ def _apply_fft_features(df: pd.DataFrame, vibration_sensor_names: list, fft_bins
 
 def preprocess_features(df_train: pd.DataFrame, df_test: pd.DataFrame,
                         fit_scaler: bool = True, scaler: MinMaxScaler = None,
-                        scaler_save_path: str = None, features_save_path: str = None) \
-                        -> (pd.DataFrame, pd.DataFrame, MinMaxScaler, list):
+                        scaler_save_path: str = None, features_save_path: str = None,
+                        rul_cap_val: int = None
+                        ) -> (pd.DataFrame, pd.DataFrame, MinMaxScaler, list):
     
+    if rul_cap_val is None:
+        rul_cap_val = cfg.RUL_CAP
+
     irrelevant_sensor_cols = [f'sensor_{idx}' for idx in cfg.IRRELEVANT_SENSORS_INDICES]
     active_sensor_cols = [s for s in cfg.ALL_SENSOR_COLS if s not in irrelevant_sensor_cols]
     
@@ -136,7 +152,10 @@ def preprocess_features(df_train: pd.DataFrame, df_test: pd.DataFrame,
     
     return df_train, df_test, scaler, selected_features
 
-def generate_sequences(df: pd.DataFrame, features: list, sequence_length: int = cfg.SEQUENCE_LENGTH) -> (np.ndarray, np.ndarray):
+def generate_sequences(df: pd.DataFrame, features: list, sequence_length: int = None) -> (np.ndarray, np.ndarray):
+    if sequence_length is None:
+        sequence_length = cfg.SEQUENCE_LENGTH
+
     X, y = [], []
     for unit_id in df['unit_number'].unique():
         subset = df[df['unit_number'] == unit_id]
@@ -148,7 +167,10 @@ def generate_sequences(df: pd.DataFrame, features: list, sequence_length: int = 
             y.append(subset_rul.iloc[i + sequence_length - 1])
     return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
 
-def generate_test_sequences_for_prediction(df_test: pd.DataFrame, features: list, sequence_length: int = cfg.SEQUENCE_LENGTH) -> np.ndarray:
+def generate_test_sequences_for_prediction(df_test: pd.DataFrame, features: list, sequence_length: int = None) -> np.ndarray:
+    if sequence_length is None:
+        sequence_length = cfg.SEQUENCE_LENGTH
+
     X_test_final = []
     for unit_id in df_test['unit_number'].unique():
         subset = df_test[df_test['unit_number'] == unit_id]

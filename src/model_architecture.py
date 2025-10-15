@@ -3,7 +3,8 @@ import torch.nn.functional as F
 from torch import nn
 import numpy as np
 
-from configs.config import cfg
+import configs.config as cfg # ИЗМЕНЕНИЕ!
+# ... (везде где было cfg.XXX, теперь останется cfg.XXX)
 
 class BaseNet(nn.Module):
     def __init__(

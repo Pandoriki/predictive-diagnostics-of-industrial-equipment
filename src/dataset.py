@@ -2,7 +2,8 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 
-from configs.config import cfg 
+import configs.config as cfg # ИЗМЕНЕНИЕ!
+# ... (везде где было cfg.XXX, теперь останется cfg.XXX)
 
 class AddGaussianNoise(object):
     def __init__(self, mean=0., std=1., noise_factor=cfg.AUGMENTATION_NOISE_FACTOR):

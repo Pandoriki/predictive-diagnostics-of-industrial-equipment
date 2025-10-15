@@ -9,7 +9,8 @@ import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
-from configs.config import cfg
+import configs.config as cfg # ИЗМЕНЕНИЕ!
+# ... (везде где было cfg.XXX, теперь останется cfg.XXX)
 from src.data_preprocessing import load_data, calculate_rul_for_train, preprocess_features, \
                                     generate_sequences, generate_test_sequences_for_prediction
 from src.model_architecture import RULFilterNet
@@ -27,9 +28,10 @@ def set_seed(seed: int):
         torch.backends.cudnn.benchmark = False
 
 def train_model():
+    os.makedirs(cfg.MODELS_DIR, exist_ok=True)
     set_seed(cfg.RANDOM_SEED)
     device = torch.device(cfg.DEVICE)
-
+    
     print("Загрузка исходных данных...")
     df_train_raw, df_test_raw, df_rul_true = load_data()
 
@@ -151,6 +153,6 @@ def train_model():
         print(f"      Статус = {status}")
 
 if __name__ == "__main__":
-    os.makedirs(cfg.MODELS_DIR, exist_ok=True)
+
     import torch 
     train_model()
