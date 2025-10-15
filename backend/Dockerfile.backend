@@ -1,0 +1,39 @@
+# Stage 1: Build Environment (Install dependencies, download configs/src)
+FROM python:3.9-slim-buster AS builder
+
+WORKDIR /app
+
+# Copy dependency files for caching layers
+COPY backend/requirements.txt ./requirements.txt
+
+# Install python dependencies
+# Using --no-cache-dir for smaller image size
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend application files
+COPY backend/. .
+
+# Copy ML-specific artifacts and configs
+COPY models/rul_prediction_model.cbm /app/models/
+COPY models/scaler.pkl /app/models/
+COPY models/selected_features.pkl /app/models/
+COPY configs/config.py /app/configs/config.py
+COPY src/data_preprocessing.py /app/src/data_preprocessing.py
+COPY src/predict_utils.py /app/src/predict_utils.py
+
+# Ensure that the app can find imported modules
+ENV PYTHONPATH /app:$PYTHONPATH
+
+# Stage 2: Production Environment (Optional, can just use builder, but best practice is slim production image)
+FROM python:3.9-slim-buster
+WORKDIR /app
+
+# Copy dependencies and pre-built files from builder stage
+COPY --from=builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+COPY --from=builder /app/. /app/
+
+# Port that FastAPI will listen on
+EXPOSE 8000
+
+# Command to run the FastAPI application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

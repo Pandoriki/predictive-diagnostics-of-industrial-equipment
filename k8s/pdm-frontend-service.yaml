@@ -1,0 +1,17 @@
+# k8s/pdm-frontend-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdm-frontend-service
+  namespace: pdm-nanobanano
+  labels:
+    app: pdm-frontend
+spec:
+  selector:
+    app: pdm-frontend
+  type: NodePort # Делаем его доступным извне кластера (для Minikube)
+  ports:
+  - protocol: TCP
+    port: 80 # Порт сервиса
+    targetPort: 3000 # Порт, на котором слушает Next.js внутри контейнера
+    nodePort: 30001 # Опционально: можно указать конкретный порт на хосте

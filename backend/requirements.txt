@@ -1,0 +1,11 @@
+# backend/requirements.txt
+# Для сборки Docker-образа Backend (FastAPI + CatBoost)
+catboost
+numpy
+pandas
+scikit-learn
+scipy
+fastapi
+uvicorn
+python-multipart
+joblib

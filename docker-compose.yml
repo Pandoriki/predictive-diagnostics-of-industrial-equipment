@@ -1,0 +1,52 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.backend # Путь к вашему FastAPI бэкенду
+    ports:
+      - "8080:8000" # Проксируем внешний порт 8080 на внутренний порт FastAPI 8000
+    networks:
+      - pdm-network
+    environment:
+      # FastAPI бэкенд не вызывает сам ML-сервис. Все внутри одного контейнера.
+      # Но этот путь нужен для инициализации:
+      MODELS_DIR: "/app/models" # Убедитесь, что main.py использует этот ENV или напрямую путь
+      PYTHONPATH: "/app" # Critical for finding src/ and configs/
+      # В Production, NEXT_PUBLIC_API_URL должен быть вашим реальным URL (e.g. your_domain.com/api)
+      # Для Docker Compose это адрес сервиса "backend" и его порт 8080, как его видит FrontEnd
+      NEXT_PUBLIC_API_URL: "http://localhost:8080/api" # Указан localhost для фронтенда из браузера
+
+    # volumes: # Для отладки (разкомментируйте, если хотите hot-reload Python-кода)
+    #   - ./backend:/app/backend
+    #   - ./models:/app/models # Для доступа к .cbm и .pkl, если не хотите копировать в Dockerfile
+    #   - ./configs:/app/configs
+    #   - ./src:/app/src
+    restart: unless-stopped # Перезапускать сервис, если он упал
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.frontend # Путь к вашему Next.js фронтенду
+    ports:
+      - "3000:3000" # Проксируем внешний порт 3000 на внутренний порт Next.js 3000
+    networks:
+      - pdm-network
+    depends_on:
+      - backend # Фронтенд зависит от бэкенда
+    environment:
+      # Важно: Front-end видит бэкенд по URL `http://localhost:8080/api` с точки зрения браузера
+      # Это позволяет напрямую делать запросы через NGINX или Next.js proxy
+      NEXT_PUBLIC_API_URL: "http://localhost:8080/api"
+      NEXT_PUBLIC_USE_MOCKS: "false" # <<< Устанавливаем в false, чтобы использовать реальный бэкенд!
+
+    # volumes: # Для отладки фронтенда (hot-reload React-кода)
+    #   - ./frontend:/app/frontend
+    #   - /app/frontend/node_modules # Чтобы не перезаписывал node_modules в контейнере
+    #   - /app/frontend/.next        # Чтобы не перезаписывал .next build files
+
+networks:
+  pdm-network:
+    driver: bridge

@@ -1,11 +1,12 @@
+# src/model_architecture.py
 import torch
 import torch.nn.functional as F
 from torch import nn
 import numpy as np
 
-import configs.config as cfg # ИЗМЕНЕНИЕ!
-# ... (везде где было cfg.XXX, теперь останется cfg.XXX)
+import configs.config as cfg
 
+# --- Base Network Class ---
 class BaseNet(nn.Module):
     def __init__(
         self,
@@ -27,15 +28,16 @@ class BaseNet(nn.Module):
         raise NotImplementedError("Метод 'build' должен быть реализован в подклассах.")
 
     def forward(self, X: torch.Tensor, pad_mask=None) -> torch.Tensor:
-        ys = self._forward(X, pad_mask)
+        ys = self._forward(X, pad_mask) 
         if self.output_type == "many_to_one_takelast":
-            return ys
+            return ys 
         else:
             raise NotImplementedError(f"Неизвестный тип вывода: {self.output_type}")
 
     def _forward(self, X: torch.Tensor, pad_mask=None) -> torch.Tensor:
         raise NotImplementedError("Метод '_forward' должен быть реализован в подклассах.")
 
+# --- Custom RNN Mixins ---
 class CustomRNNMixin(object):
     def __init__(self, *args, **kwargs):
         if "batch_first" not in kwargs:
@@ -45,7 +47,6 @@ class CustomRNNMixin(object):
     def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
         input_rnn_format = input_tensor.transpose(1, 2).contiguous() 
         output_rnn_format, _ = super().forward(input_rnn_format) 
-        
         return output_rnn_format.transpose(1, 2).contiguous() 
 
 class CustomGRU(CustomRNNMixin, nn.GRU):
@@ -54,6 +55,7 @@ class CustomGRU(CustomRNNMixin, nn.GRU):
 class CustomLSTM(CustomRNNMixin, nn.LSTM):
     pass
 
+# --- Core Building Block: CGLLayer (Convolution/GRU/LSTM Layer) ---
 class CGLLayer(nn.Sequential):
     output_size = None
 
@@ -97,7 +99,7 @@ class CGLLayer(nn.Sequential):
                 )
         elif type in ["gru", "lstm"]:
             if dropout:
-                layers.append(nn.Dropout(dropout))
+                layers.append(nn.Dropout(dropout)) 
 
             klass = {"gru": CustomGRU, "lstm": CustomLSTM}[type]
             
@@ -154,7 +156,7 @@ class FilterNetFeatureExtractor(BaseNet):
                 CGLLayer(
                     in_shape,
                     w_strided,
-                    kernel_size=cnn_kernel_size,
+                    kernel_size=cnn_kernel_size, 
                     type="cnn",
                     stride=stride,
                     pool=pool,
@@ -162,7 +164,7 @@ class FilterNetFeatureExtractor(BaseNet):
                 )
             )
             in_shape = down_stack[-1].output_size
-            self.output_stride *= stride 
+            self.output_stride *= stride
 
         self.down_stack = nn.Sequential(*down_stack)
 
@@ -172,7 +174,7 @@ class FilterNetFeatureExtractor(BaseNet):
                 CGLLayer(
                     in_shape, 
                     w_l,      
-                    kernel_size=cnn_kernel_size,
+                    kernel_size=cnn_kernel_size, 
                     type="lstm", 
                     dropout=dropout,
                 )
@@ -183,34 +185,25 @@ class FilterNetFeatureExtractor(BaseNet):
         post_lstm_stack = []
         for _ in range(n_dense_post_l):
             post_lstm_stack.append(
-                CGLLayer(in_shape, w_dense_post_l, kernel_size=1, type="cnn", dropout=dropout) 
+                CGLLayer(in_shape, w_dense_post_l, kernel_size=1, type="cnn", dropout=dropout)
             )
             in_shape = post_lstm_stack[-1].output_size
         self.post_lstm_stack = nn.Sequential(*post_lstm_stack)
         
-        self.feature_output_dim = in_shape 
+        self.feature_output_dim = in_shape
 
     def _forward(self, X: torch.Tensor, pad_mask=None) -> torch.Tensor:
-        """
-        Forward pass для FilterNetFeatureExtractor.
-        Input X: (batch_size, sequence_length, num_features).
-        Output: (batch_size, final_feature_dim) после извлечения последнего элемента последовательности.
-        """
-        X = X.transpose(1, 2)
+        X = X.transpose(1, 2) 
 
         x_cnn = self.down_stack(X) 
         x_lstm = self.lstm_stack(x_cnn) 
         x_final_features_sequence = self.post_lstm_stack(x_lstm)
-
+        
         extracted_features = x_final_features_sequence[:, :, -1] 
         
         return extracted_features
 
 class RULRegressionHead(nn.Module):
-    """
-    Простая регрессионная 'голова' для предсказания единственного значения RUL
-    из извлеченного вектора признаков.
-    """
     def __init__(self, feature_dim: int, dropout_rate: float = cfg.DROPOUT_RATE):
         super().__init__()
         self.head = nn.Sequential(
@@ -221,13 +214,9 @@ class RULRegressionHead(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Input x expected shape (batch_size, feature_dim)"""
         return self.head(x)
 
 class RULFilterNet(nn.Module):
-    """
-    Объединяет FilterNetFeatureExtractor (backbone) с RULRegressionHead.
-    """
     def __init__(self, input_channels: int):
         super().__init__()
         self.feature_extractor = FilterNetFeatureExtractor(input_channels=input_channels, **cfg.MODEL_CONFIG)
@@ -240,11 +229,6 @@ class RULFilterNet(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Прямой проход для RULFilterNet.
-        Input x: (batch_size, sequence_length, num_features)
-        Output: (batch_size, 1) - прогноз RUL.
-        """
         features = self.feature_extractor(x)      
         rul_prediction = self.regression_head(features) 
         return rul_prediction

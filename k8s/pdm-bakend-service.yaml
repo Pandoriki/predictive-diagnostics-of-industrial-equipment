@@ -1,0 +1,16 @@
+# k8s/pdm-backend-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdm-backend-service # Имя сервиса, по которому Frontend будет обращаться: pdm-backend-service.pdm-nanobanano
+  namespace: pdm-nanobanano
+  labels:
+    app: pdm-backend
+spec:
+  selector:
+    app: pdm-backend # Соотносится с label в Deployment
+  ports:
+  - protocol: TCP
+    port: 80 # Порт сервиса Kubernetes (внутренний)
+    targetPort: 8000 # Порт, на котором слушает контейнер
+# type: ClusterIP # Это default. Внешний доступ через Ingress.
