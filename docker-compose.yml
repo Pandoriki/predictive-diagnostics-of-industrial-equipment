@@ -54,27 +54,38 @@ services:
       - ./configs:/app/configs 
       - ./src:/app/src           
     restart: unless-stopped
-    
   # --- 4. FRONTEND SERVICE (НОВЫЙ!) ---
   frontend:
     build:
-      context: .                 # Контекст сборки - корневая папка проекта
-      dockerfile: frontend/Dockerfile.frontend # Путь к Dockerfile React/Vite фронтенда
-    ports:
-      - "3000:3000"              # Frontend будет доступен на http://localhost:3000
+      context: .
+      dockerfile: frontend/Dockerfile.frontend
     networks:
       - pdm-network
-    depends_on:                  # Frontend зависит от API Gateway
+    depends_on:
       - backend
     environment:
-      # Фронтенд будет обращаться к внешнему порту 8080 основного бэкенда.
-      # Важно: для React/Vite проекта, вам не нужен `NEXT_PUBLIC_API_URL`, а нужен
-      # прямое URL API для fetch/axios. Vite подставляет это в процесс.env
-      VITE_API_URL: "http://localhost:8080/api" # (Vite_переменные окружения начинаются с VITE_)
-      # Использовать ли моки на фронтенде
-      VITE_USE_MOCKS: "true" # "true" or "false" (Если "false", бэкенд должен быть запущен)
+      # ИЗМЕНЕНИЕ: URL для API теперь указывает на корень и новый путь.
+      # Лучше всего использовать относительный путь. Так фронтенд не будет
+      # привязан к конкретному домену (localhost). Он будет делать запросы
+      # на тот же хост, с которого загрузился.
+      VITE_API_URL: "/api" 
+      VITE_USE_MOCKS: "false" 
     restart: unless-stopped
 
+  # --- NGINX REVERSE PROXY ---
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile.nginx
+    ports:
+      # ИЗМЕНЕНИЕ: Меняем порт на стандартный HTTP порт 80.
+      - "80:80"
+    networks:
+      - pdm-network
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
 
 # --- ОПРЕДЕЛЕНИЕ СЕТИ ---
 networks:

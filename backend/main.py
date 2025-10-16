@@ -2,8 +2,9 @@ import os
 import numpy as np
 import pandas as pd
 from datetime import datetime
+import json
 
-from fastapi import FastAPI, HTTPException, Request # Добавлен Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request # Добавлен Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager 
 from pydantic import BaseModel, Field # Pydantic BaseModel для RequestBody
@@ -106,7 +107,9 @@ app = FastAPI(
     title="Предиктивная Диагностика: API Gateway",
     description="Основной API-шлюз, маршрутизирующий запросы к ML и Data-микросервисам.",
     version="1.0.0",
-    lifespan=lifespan 
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/redoc"
 )
 
 # --- MIDDLEWARE: CORS ---
