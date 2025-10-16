@@ -1,5 +1,5 @@
 import os
-import torch
+
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_RAW_DIR = os.path.join(BASE_DIR, 'data', 'raw')
@@ -9,7 +9,7 @@ TRAIN_FILE = 'train_FD001.txt'
 TEST_FILE = 'test_FD001.txt'   
 RUL_TRUE_FILE = 'RUL_FD001.txt'
 
-USE_XGBOOST_MODEL = False # Явно указываем, что используем CatBoost (не XGBoost)
+USE_XGBOOST_MODEL = False 
 
 SEQUENCE_LENGTH = 50   
 RUL_CAP = 125          
@@ -36,12 +36,20 @@ CATBOOST_CONFIG = {
     'eval_metric': 'MAE',   
     'random_seed': 42,
     'verbose': 0,      
-    'early_stopping_rounds': 50,
+    'early_stopping_rounds': 50, 
     'l2_leaf_reg': 3,  
-    'thread_count': -1
+    'thread_count': -1 
 }
 
-N_FOLDS_CV = 5 # K = 5 для K-Fold кросс-валидации
+N_FOLDS_CV = 5 
 
 RANDOM_SEED = 42
-DEVICE = 'cpu'
+# !!! ВАЖНО: Указываем 'cpu' явно, чтобы не требовал CUDA !!!
+DEVICE = 'cpu' # WAS: 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
+_raw_data_full_column_names_from_txt = ['unit_number', 'time_in_cycles'] + OP_SETTING_COLS + ALL_SENSOR_COLS + ['_dummy_col_26', '_dummy_col_27']
+_meaningful_raw_columns = ['unit_number', 'time_in_cycles'] + OP_SETTING_COLS + ALL_SENSOR_COLS
+
+ML_SERVICE_URL = "http://ml-service:8000"
+DATA_SERVICE_URL = "http://data-service:8000"

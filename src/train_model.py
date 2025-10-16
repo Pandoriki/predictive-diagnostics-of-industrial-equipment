@@ -108,19 +108,6 @@ def train_model():
     print(f"   MAE (CV): {avg_mae_cv:.4f}")
     print(f"   MAPE (CV): {avg_mape_cv:.2f}%")
 
-    # --- НОВОЕ: Гистограмма OOF-предсказаний и Истинных Таргетов ---
-    plt.figure(figsize=(10, 6))
-    sns.histplot(y_full_train_for_folds, color='green', label='Истинный RUL (Full Train)', kde=True, stat='density', alpha=0.5)
-    sns.histplot(oof_preds_for_meta, color='orange', label='OOF-Предсказания RUL', kde=True, stat='density', alpha=0.5)
-    plt.title('Распределение истинных RUL vs OOF-предсказаний CatBoost')
-    plt.xlabel('RUL (циклы)')
-    plt.ylabel('Плотность')
-    plt.legend()
-    plt.savefig(os.path.join(cfg.MODELS_DIR, 'oof_predictions_vs_true_rul_catboost_cv.png'))
-    plt.show()
-    # --- КОНЕЦ НОВОГО ---
-
-
     print("\nОбучение финальной модели CatBoost на всех тренировочных данных...")
     final_cat_model = CatBoostRegressor(**cfg.CATBOOST_CONFIG)
     final_cat_model.fit(X_full_train_for_folds, y_full_train_for_folds, verbose=0)

@@ -1,0 +1,21 @@
+FROM python:3.9-slim-buster
+WORKDIR /app
+
+COPY data-service/requirements.txt ./
+RUN pip install --no-cache-dir --upgrade pip setuptools
+RUN pip install --no-cache-dir -r requirements.txt
+RUN rm ./requirements.txt
+
+# --- Копируем конфиг-файл ---
+COPY configs/ /app/configs/
+# --- Копируем ML-логику из src/ (только load_data) ---
+COPY src/data_preprocessing.py /app/src/ 
+# --- Копируем сырые данные (ДЛЯ СЕРВИСА ДАННЫХ) ---
+COPY data/ /app/data/
+
+# --- Копируем само приложение Data-сервиса ---
+COPY data-service/main.py /app/main.py
+
+ENV PYTHONPATH=/app:$PYTHONPATH
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

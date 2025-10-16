@@ -1,11 +1,11 @@
 # backend/requirements.txt
-# Для сборки Docker-образа Backend (FastAPI + CatBoost)
+fastapi
+uvicorn[standard]
+python-multipart
 catboost
 numpy
 pandas
 scikit-learn
 scipy
-fastapi
-uvicorn
-python-multipart
 joblib
+httpx # <<< НОВОЕ: ДОБАВЛЕН HTTPX

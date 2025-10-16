@@ -13,16 +13,15 @@ def load_data(data_dir: str = None) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame
     if data_dir is None:
         data_dir = cfg.DATA_RAW_DIR 
 
-    column_names = ['unit_number', 'time_in_cycles', 'op_setting_1', 'op_setting_2', 'op_setting_3'] + \
-                   [f'sensor_{i}' for i in range(1, 22)]
-
+    temp_col_names_for_txt_read = cfg._raw_data_full_column_names_from_txt 
+    
     df_train = pd.read_csv(os.path.join(data_dir, cfg.TRAIN_FILE), sep=' ', header=None)
-    df_train.drop(columns=[26, 27], inplace=True) 
-    df_train.columns = column_names
+    df_train.columns = temp_col_names_for_txt_read 
+    df_train.drop(columns=['_dummy_col_26', '_dummy_col_27'], inplace=True) 
 
     df_test = pd.read_csv(os.path.join(data_dir, cfg.TEST_FILE), sep=' ', header=None)
-    df_test.drop(columns=[26, 27], inplace=True) 
-    df_test.columns = column_names
+    df_test.columns = temp_col_names_for_txt_read 
+    df_test.drop(columns=['_dummy_col_26', '_dummy_col_27'], inplace=True) 
 
     df_rul_true = pd.read_csv(os.path.join(data_dir, cfg.RUL_TRUE_FILE), sep=' ', header=None)
     df_rul_true.drop(columns=[1], inplace=True) 
@@ -43,121 +42,134 @@ def calculate_rul_for_train(df_train: pd.DataFrame, rul_cap: int = None) -> pd.D
     
     return df_train
 
-def _apply_fft_features(df: pd.DataFrame, vibration_sensor_names: list, fft_bins: int) -> pd.DataFrame:
+def _apply_fft_features_single_unit(df_unit_data: pd.DataFrame, vibration_sensor_names: list, fft_bins: int) -> pd.DataFrame:
+    if not vibration_sensor_names:
+        return df_unit_data
+
+    df_with_fft = df_unit_data.copy()
+
+    for sensor_name in vibration_sensor_names:
+        if sensor_name in df_unit_data.columns:
+            signal = df_unit_data[sensor_name].values
+            N = len(signal)
+            
+            if N < 2: 
+                for i in range(fft_bins):
+                    df_with_fft[f'{sensor_name}_fft_bin{i}_mean'] = 0.0
+                    df_with_fft[f'{sensor_name}_fft_bin{i}_max'] = 0.0
+                continue
+            
+            yf = fft(signal)
+            xf = fftfreq(N, 1)[:N//2] 
+            amplitudes = np.abs(yf[0:N//2])
+            
+            if xf.size == 0: continue
+            
+            bin_size = xf.max() / fft_bins
+            
+            for i in range(fft_bins):
+                low_freq = i * bin_size
+                high_freq = (i + 1) * bin_size
+                bin_amplitudes = amplitudes[(xf >= low_freq) & (xf < high_freq)]
+                
+                mean_val = np.mean(bin_amplitudes) if len(bin_amplitudes) > 0 else 0.0
+                max_val = np.max(bin_amplitudes) if len(bin_amplitudes) > 0 else 0.0
+
+                df_with_fft[f'{sensor_name}_fft_bin{i}_mean'] = mean_val
+                df_with_fft[f'{sensor_name}_fft_bin{i}_max'] = max_val
+    
+    return df_with_fft
+
+
+def _apply_fft_features_grouped(df: pd.DataFrame, vibration_sensor_names: list, fft_bins: int) -> pd.DataFrame:
     if not vibration_sensor_names:
         return df
 
-    all_units_with_fft = []
-    
-    for unit_id in df['unit_number'].unique():
-        unit_subset = df[df['unit_number'] == unit_id].copy()
-        
-        unit_fft_aggregates = {} 
-        
-        for sensor_name in vibration_sensor_names:
-            if sensor_name in unit_subset.columns:
-                signal = unit_subset[sensor_name].values
-                N = len(signal)
-                
-                if N == 0: continue
-                
-                yf = fft(signal)
-                xf = fftfreq(N, 1)[:N//2]
-                amplitudes = np.abs(yf[0:N//2])
-                
-                if xf.size == 0: continue
-                
-                bin_size = xf.max() / fft_bins
-                
-                for i in range(fft_bins):
-                    low_freq = i * bin_size
-                    high_freq = (i + 1) * bin_size
-                    
-                    bin_amplitudes = amplitudes[(xf >= low_freq) & (xf < high_freq)]
-                    
-                    mean_val = np.mean(bin_amplitudes) if len(bin_amplitudes) > 0 else 0.0
-                    max_val = np.max(bin_amplitudes) if len(bin_amplitudes) > 0 else 0.0
-
-                    unit_fft_aggregates[f'{sensor_name}_fft_bin{i}_mean'] = mean_val
-                    unit_fft_aggregates[f'{sensor_name}_fft_bin{i}_max'] = max_val
-
-        if not unit_fft_aggregates:
-             all_units_with_fft.append(unit_subset)
-             continue
-        
-        for feature_name, value in unit_fft_aggregates.items():
-            unit_subset[feature_name] = value 
-
-        all_units_with_fft.append(unit_subset)
-
-    return pd.concat(all_units_with_fft, ignore_index=True)
+    processed_dfs = []
+    for unit_id, group in df.groupby('unit_number'):
+        processed_group = _apply_fft_features_single_unit(group.copy(), vibration_sensor_names, fft_bins)
+        processed_dfs.append(processed_group)
+    return pd.concat(processed_dfs, ignore_index=True)
 
 
-def preprocess_features(df_train: pd.DataFrame, df_test: pd.DataFrame,
+def preprocess_features(df_train: pd.DataFrame, df_test: pd.DataFrame, 
                         fit_scaler: bool = True, scaler: MinMaxScaler = None,
                         scaler_save_path: str = None, features_save_path: str = None,
-                        rul_cap_val: int = None
+                        is_single_unit_df: bool = False 
                         ) -> (pd.DataFrame, pd.DataFrame, MinMaxScaler, list):
     
-    if rul_cap_val is None:
-        rul_cap_val = cfg.RUL_CAP
-
     irrelevant_sensor_cols = [f'sensor_{idx}' for idx in cfg.IRRELEVANT_SENSORS_INDICES]
-    active_sensor_cols = [s for s in cfg.ALL_SENSOR_COLS if s not in irrelevant_sensor_cols]
+    active_sensor_cols_initial = [s for s in cfg.ALL_SENSOR_COLS if s not in irrelevant_sensor_cols] 
     
     b, a = butter(N=3, Wn=0.05, btype='low', analog=False) 
-    
-    for sensor_idx in cfg.NOISY_SENSORS_FOR_FILTER_INDICES: # <- Здесь уже есть sensor_idx
-        sensor_name = f'sensor_{sensor_idx}' # <- Используем sensor_idx, как определено в цикле
-        if sensor_name in active_sensor_cols:
+
+    MIN_LEN_FOR_FILTFILT = 15 
+
+    def apply_filter_for_df(df_input: pd.DataFrame, sensor_name: str, filtered_col_name: str, apply_grouped: bool):
+        if sensor_name not in df_input.columns:
+            df_input[filtered_col_name] = 0.0
+            return df_input
+
+        signal_data = df_input[sensor_name].values.astype(float)
+        
+        if len(signal_data) < MIN_LEN_FOR_FILTFILT:
+            df_input[filtered_col_name] = signal_data 
+        elif apply_grouped and 'unit_number' in df_input.columns and df_input['unit_number'].nunique() > 1: 
+            df_input[filtered_col_name] = df_input.groupby('unit_number')[sensor_name].transform(
+                lambda x: filtfilt(b, a, x.values.astype(float)) if len(x) >= MIN_LEN_FOR_FILTFILT else x.values
+            )
+        else: 
+            df_input[filtered_col_name] = filtfilt(b, a, signal_data)
+        return df_input
+            
+    processed_noisy_sensor_names = [] 
+    for sensor_idx in cfg.NOISY_SENSORS_FOR_FILTER_INDICES:
+        sensor_name = f'sensor_{sensor_idx}' 
+        if sensor_name in df_train.columns and sensor_name in df_test.columns: 
             filtered_col_name = f'{sensor_name}_filtered'
-            df_train[filtered_col_name] = df_train.groupby('unit_number')[sensor_name].transform(
-                lambda x: filtfilt(b, a, x.values.astype(float))
-            )
-            df_test[filtered_col_name] = df_test.groupby('unit_number')[sensor_name].transform(
-                lambda x: filtfilt(b, a, x.values.astype(float))
-            )
-            active_sensor_cols.remove(sensor_name)
-            active_sensor_cols.append(filtered_col_name) 
+            df_train = apply_filter_for_df(df_train, sensor_name, filtered_col_name, apply_grouped=not is_single_unit_df)
+            df_test = apply_filter_for_df(df_test, sensor_name, filtered_col_name, apply_grouped=not is_single_unit_df)
+            
+            processed_noisy_sensor_names.append(filtered_col_name)
+
+    remaining_active_original_sensors = [s for s in active_sensor_cols_initial if s not in [f'sensor_{idx}' for idx in cfg.NOISY_SENSORS_FOR_FILTER_INDICES]]
+    selected_features = list(cfg.OP_SETTING_COLS + remaining_active_original_sensors + processed_noisy_sensor_names)
     
-    selected_features = cfg.OP_SETTING_COLS + active_sensor_cols
-    
-    fft_sensor_names_to_process = [f'sensor_{idx}' for idx in cfg.VIBRATION_SENSORS_FOR_FFT_INDICES]
+    fft_source_sensors = [f'sensor_{idx}' for idx in cfg.VIBRATION_SENSORS_FOR_FFT_INDICES if f'sensor_{idx}' in df_train.columns] 
     
     if cfg.USE_FFT_FEATURES:
-        fft_source_sensors = [s for s in fft_sensor_names_to_process if s in df_train.columns]
-
-        df_train = _apply_fft_features(df_train, fft_source_sensors, 
-                                                    cfg.FFT_BINS_COUNT)
-        df_test = _apply_fft_features(df_test, fft_source_sensors, 
-                                                   cfg.FFT_BINS_COUNT)
+        
+        if is_single_unit_df: 
+            df_train = _apply_fft_features_single_unit(df_train, fft_source_sensors, cfg.FFT_BINS_COUNT)
+            df_test = _apply_fft_features_single_unit(df_test, fft_source_sensors, cfg.FFT_BINS_COUNT)
+        else: 
+            df_train = _apply_fft_features_grouped(df_train, fft_source_sensors, cfg.FFT_BINS_COUNT)
+            df_test = _apply_fft_features_grouped(df_test, fft_source_sensors, cfg.FFT_BINS_COUNT)
         
         for sensor in fft_source_sensors:
             for i in range(cfg.FFT_BINS_COUNT):
-                fft_col_mean = f'{sensor}_fft_bin{i}_mean'
-                fft_col_max = f'{sensor}_fft_bin{i}_max'
-                if fft_col_mean not in selected_features:
-                    selected_features.append(fft_col_mean)
-                if fft_col_max not in selected_features:
-                    selected_features.append(fft_col_max)
+                selected_features.append(f'{sensor}_fft_bin{i}_mean')
+                selected_features.append(f'{sensor}_fft_bin{i}_max')
         
-        for feat in selected_features:
-             if feat not in df_train.columns:
-                 df_train[feat] = 0.0
-             if feat not in df_test.columns:
-                 df_test[feat] = 0.0
+        for df in [df_train, df_test]:
+             for feat in selected_features:
+                 if feat not in df.columns:
+                     df[feat] = 0.0
     
+    df_train.fillna(0.0, inplace=True) 
+    df_test.fillna(0.0, inplace=True)
+        
     if fit_scaler:
         scaler = MinMaxScaler()
-        df_train[selected_features] = scaler.fit_transform(df_train[selected_features])
+        df_train_temp_for_scaler = df_train[selected_features].copy()
+        df_train[selected_features] = scaler.fit_transform(df_train_temp_for_scaler)
         if scaler_save_path:
             joblib.dump(scaler, scaler_save_path)
     else:
         if scaler is None:
             raise ValueError("Если fit_scaler=False, должен быть предоставлен обученный MinMaxScaler.")
-        df_train[selected_features] = scaler.transform(df_train[selected_features])
-
-    df_test[selected_features] = scaler.transform(df_test[selected_features])
+        df_test_temp_for_scaler = df_test[selected_features].copy() 
+        df_test[selected_features] = scaler.transform(df_test_temp_for_scaler)
 
     if features_save_path:
         joblib.dump(selected_features, features_save_path)
@@ -196,7 +208,7 @@ def generate_flat_test_features_for_boosting(df_test: pd.DataFrame, features: li
             current_window_last_point = subset[features].iloc[-1].values 
             X_test_flat_final.append(current_window_last_point)
         else:
-            last_record_features = subset[features].iloc[-1].values if len(subset) > 0 else np.zeros(len(features), dtype=np.float32)
+            last_record_features = subset[features].iloc[-1].values if not subset.empty else np.zeros(len(features), dtype=np.float32)
             X_test_flat_final.append(last_record_features)
             
     return np.array(X_test_flat_final, dtype=np.float32)

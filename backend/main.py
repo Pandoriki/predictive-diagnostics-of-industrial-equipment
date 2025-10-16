@@ -1,56 +1,34 @@
 import os
 import numpy as np
 import pandas as pd
-import joblib
-from catboost import CatBoostRegressor
+from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request # Добавлен Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict # Добавлен Dict для pydantic_config
+from contextlib import asynccontextmanager 
+from pydantic import BaseModel, Field # Pydantic BaseModel для RequestBody
+from typing import List, Optional, Literal # Используем Literal для строгой типизации
+import httpx # Для HTTP-запросов к другим микросервисам (Data-Service, ML-Service)
 
-# Импортируем модули ML-логики, которые находятся на /app/configs/ и /app/src/
-# Благодаря ENV PYTHONPATH /app:$PYTHONPATH в Dockerfile
-import configs.config as cfg
-from src.data_preprocessing import calculate_rul_for_train, preprocess_features, load_data
-from src.predict_utils import get_rul_status
+# Импорты конфигураций
+import configs.config as cfg # Для SEQUENCE_LENGTH
+# Другие ML-зависимости не нужны, т.к. этот сервис не занимается ML/данными
 
-app = FastAPI(
-    title="Предиктивная Диагностика: Unified Backend API",
-    description="Объединенный API-сервис, включающий управление данными и ML-инференс для системы предиктивной диагностики.",
-    version="1.0.0",
-)
+# --- Pydantic модели (изменен импорт, они должны быть общими для бэкенда) ---
+# Предполагаем, что Pydantic-модели будут импортироваться из общего файла в `schemas`
+# Или скопировать сюда. Для монолита это был бы тот же main.py
+# В нашей текущей модульной архитектуре `backend/main.py` (НЕ `backend/app/main.py` из предыдущей структуры)
+# он будет напрямую обращаться к MLResources.
 
-# --- MIDDLEWARE: CORS ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
-    allow_methods=["*"], 
-    allow_headers=["*"], 
-)
+# Новая схема
+# Оставим тут. Все Pydantic модели (они могут быть в отдельном файле /schemas/models.py,
+# но пока тут для упрощения.)
 
+_full_raw_column_names_for_datapoint_parsing = ['unit_number', 'time_in_cycles'] + cfg.OP_SETTING_COLS + cfg.ALL_SENSOR_COLS
 
-# --- ГЛОБАЛЬНЫЕ РЕСУРСЫ ---
-ml_model: Optional[CatBoostRegressor] = None 
-scaler: Optional[MinMaxScaler] = None 
-selected_features: Optional[List[str]] = None
-
-# Имитация исторической базы данных (на основе test_FD001.txt)
-global_historical_data_raw: Optional[pd.DataFrame] = None # Сырые тестовые данные
-df_true_test_rul: Optional[pd.DataFrame] = None # RUL для последней точки тестовых юнитов
-df_all_processed_history_data: Optional[pd.DataFrame] = None # Все данные test set, полностью предобработанные
-
-# Полные имена колонок для SensorDataPoint (должны соответствовать df_test_raw)
-_full_raw_column_names = ['unit_number', 'time_in_cycles', 'op_setting_1', 'op_setting_2', 'op_setting_3'] + \
-                         [f'sensor_{i}' for i in range(1, 22)]
-
-
-# --- Вспомогательные классы Pydantic (Согласованы с frontend/src/api/types.ts) ---
 class SensorDataPoint(BaseModel):
-    # Убираем __pydantic_config__ = {'extra': 'ignore'} здесь, 
-    # лучше, если Pydantic будет требовать точные поля для входящего запроса.
-    # Если данные с фронтенда могут быть неполными, тогда нужно добавлять.
+    __pydantic_config__ = {'extra': 'ignore'} # Игнорировать поля, которых нет в модели
+
     unit_number: int
     time_in_cycles: int
     op_setting_1: float
@@ -68,7 +46,7 @@ class SensorDataPoint(BaseModel):
     sensor_10: float
     sensor_11: float
     sensor_12: float
-    sensor_13: float
+    sensor_13: float 
     sensor_14: float
     sensor_15: float
     sensor_16: float
@@ -80,15 +58,14 @@ class SensorDataPoint(BaseModel):
 
 class PredictionRequest(BaseModel):
     unit_id: int = Field(..., description="Уникальный идентификатор оборудования")
-    sequence_data: List[SensorDataPoint] = Field(..., min_items=cfg.SEQUENCE_LENGTH, max_items=cfg.SEQUENCE_LENGTH,
-                                                 description=f"Последовательность сырых данных датчиков за {cfg.SEQUENCE_LENGTH} циклов.")
+    sequence_data: List[SensorDataPoint] = Field(..., description=f"Последовательность сырых данных датчиков за {cfg.SEQUENCE_LENGTH} циклов.")
 
 class PredictionResponse(BaseModel):
     unit_id: int
     predicted_rul: float = Field(..., description="Прогнозируемое оставшееся время до отказа в циклах.")
     status_ru: str = Field(..., description="Статус оборудования на русском языке.")
-    status_code: str = Field(..., description="Краткий код статуса (normal, warning, critical).")
-    status_color: str = Field(..., description="Предполагаемый цвет статуса (зеленый, желтый, красный).")
+    status_code: Literal['normal', 'warning', 'critical'] 
+    status_color: Literal['зеленый', 'желтый', 'красный'] 
     reason: str = Field(..., description="Предполагаемая причина состояния (на основе правил, не ML).")
 
 class HistoryDataPointSimplified(BaseModel):
@@ -106,251 +83,151 @@ class EquipmentStatusSummary(BaseModel):
     unit_id: int
     current_rul: float
     status_ru: str
-    status_code: 'normal' | 'warning' | 'critical'
-    status_color: 'зеленый' | 'желтый' | 'красный'
+    status_code: Literal['normal', 'warning', 'critical'] 
+    status_color: Literal['зеленый', 'желтый', 'красный'] 
     last_updated: str
 
+# --- GLOBAL HTTPX CLIENT (для запросов к микросервисам) ---
+# Инициализируем один раз для эффективного использования.
+httpx_client: Optional[httpx.AsyncClient] = None
 
-# --- Инициализация при старте FastAPI ---
-@app.on_event("startup")
-async def load_ml_and_data_resources():
-    global ml_model, scaler, selected_features, global_historical_data_raw, \
-           df_true_test_rul, df_all_processed_history_data
+# --- Контекстный менеджер FastAPI для событий Startup/Shutdown ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("API Gateway: Запуск сервиса...")
+    global httpx_client
+    httpx_client = httpx.AsyncClient() # Инициализация клиента HTTP
+    yield 
+    print("API Gateway: Завершение работы сервиса. Закрытие HTTP клиента...")
+    await httpx_client.aclose()
 
-    model_path_cbm = os.path.join(cfg.MODELS_DIR, 'rul_prediction_model.cbm') 
-    scaler_path = os.path.join(cfg.MODELS_DIR, 'scaler.pkl')
-    features_path = os.path.join(cfg.MODELS_DIR, 'selected_features.pkl')
 
-    if not os.path.exists(model_path_cbm) or not os.path.exists(scaler_path) or not os.path.exists(features_path):
-        raise HTTPException(
-            status_code=500,
-            detail=f"Не найдены артефакты ML. Запустите 'python -m src.train_model'. Проверены пути: {model_path_cbm}, {scaler_path}, {features_path}"
-        )
+app = FastAPI(
+    title="Предиктивная Диагностика: API Gateway",
+    description="Основной API-шлюз, маршрутизирующий запросы к ML и Data-микросервисам.",
+    version="1.0.0",
+    lifespan=lifespan 
+)
 
+# --- MIDDLEWARE: CORS ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], 
+    allow_credentials=True,
+    allow_methods=["*"], 
+    allow_headers=["*"],
+)
+
+
+# --- API ENDPOINTS (Переадресация запросов к другим микросервисам) ---
+
+@app.post("/api/predict_rul", response_model=PredictionResponse, tags=["Прогноз RUL"]) 
+async def predict_rul_endpoint(request: PredictionRequest):
+    if httpx_client is None:
+        raise HTTPException(status_code=500, detail="HTTP клиент не инициализирован.")
+    
+    # Перенаправляем запрос к ML-Service
     try:
-        # Загрузка MinMaxScaler
-        scaler = joblib.load(scaler_path)
-        print(f"Scaler загружен из {scaler_path}")
-
-        # Загрузка списка выбранных признаков
-        selected_features = joblib.load(features_path)
-        print(f"Список признаков загружен из {features_path} ({len(selected_features)} признаков).")
-
-        # Загрузка CatBoost модели
-        ml_model = CatBoostRegressor()
-        ml_model.load_model(model_path_cbm)
-        print(f"CatBoost модель загружена из {model_path_cbm}.")
-
-        # Загрузка сырых тестовых данных для имитации истории/БД
-        df_train_raw_dummy, global_historical_data_raw, df_true_test_rul = load_data(cfg.DATA_RAW_DIR) # df_train_raw_dummy - заглушка
-        
-        # Добавляем max_cycle_in_unit к сырым данным, для pseudo-RUL вычислений
-        max_time_per_unit = global_historical_data_raw.groupby('unit_number')['time_in_cycles'].max()
-        global_historical_data_raw = global_historical_data_raw.merge(
-            max_time_per_unit.rename('max_cycle_in_unit'), on='unit_number', how='left')
-
-
-        # Предобрабатываем ВЕСЬ тестовый набор, чтобы быстро отдавать уже обработанные фичи для History / StatusSummary
-        # В preprocess_features требуется `df_train` для `fit_scaler=False`. Используем фиктивный, пустой DataFrame.
-        df_empty_train = pd.DataFrame(columns=_full_raw_column_names + ['RUL', 'max_cycle_in_unit'])
-        df_all_processed_history_data, _, _, _ = preprocess_features(
-            df_empty_train, global_historical_data_raw.copy(), # !!! Pass a copy of raw data, not already preprocessed
-            fit_scaler=False, scaler=scaler, rul_cap_val=cfg.RUL_CAP
-        )
-        print(f"Все исторические данные (обработанные) для сервисов загружены: {df_all_processed_history_data.shape}")
-        
+        ml_response = await httpx_client.post(f"{cfg.ML_SERVICE_URL}/predict_rul", json=request.model_dump())
+        ml_response.raise_for_status() # Выбросить исключение для кодов 4xx/5xx
+        return PredictionResponse(**ml_response.json())
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"ML Service Error: {e.response.text}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Невозможно подключиться к ML-сервису: {e}")
     except Exception as e:
         import traceback
-        print(f"КРИТИЧЕСКАЯ ОШИБКА: Не удалось загрузить ML ресурсы: {e}")
+        print(f"[{datetime.now().isoformat()}] Prediction Error in Gateway: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Сервис не готов: ошибка загрузки ML ресурсов. Проверьте логи.")
+        raise HTTPException(status_code=500, detail=f"Ошибка Gateway при перенаправлении прогноза: {e}")
 
 
-# --- Вспомогательная функция для предобработки одной последовательности для CatBoost инференса ---
-def preprocess_single_sequence_for_inference(raw_sequence_data: List[SensorDataPoint]) -> np.ndarray:
-    global scaler, selected_features # Access global variables
-
-    if scaler is None or selected_features is None or ml_model is None:
-        raise ValueError("ML ресурсы не загружены. Обратитесь к администратору.")
-
-    df_raw_sequence = pd.DataFrame([s.model_dump() for s in raw_sequence_data])
-
-    # Гарантируем наличие всех ожидаемых колонок в DF (заполняем нулями, если нет)
-    for col in _full_raw_column_names:
-        if col not in df_raw_sequence.columns:
-            df_raw_sequence[col] = 0.0 # Заполняем 0 для отсутствующих сенсоров, чтобы избежать ошибок
-
-
-    df_for_preprocess = df_raw_sequence[_full_raw_column_names].copy()
-    
-    df_train_dummy = pd.DataFrame(columns=_full_raw_column_names + ['RUL', 'max_cycle_in_unit']) 
-    
-    _, df_processed_single_sequence, _, _ = \
-        preprocess_features(df_train_dummy.copy(), df_for_preprocess.copy(), 
-                            fit_scaler=False, scaler=scaler)
-
-    final_flat_features = df_processed_single_sequence[selected_features].iloc[-1].values 
-    
-    if final_flat_features.shape != (len(selected_features),):
-        raise ValueError(f"Ошибка формы данных после предобработки для инференса CatBoost. Ожидаемо ({len(selected_features)},), получено {final_flat_features.shape}")
-
-    return final_flat_features.astype(np.float32)
-
-
-# --- API ЭНДПОИНТЫ ---
-
-@app.post("/api/predict_rul", response_model=PredictionResponse, tags=["Прогноз RUL"])
-async def predict_rul_api(request: PredictionRequest): # Changed function name to avoid conflict with method name
-    if ml_model is None or scaler is None or selected_features is None:
-        raise HTTPException(status_code=503, detail="ML сервис не готов. Модель или скейлер не загружены.")
+@app.get("/api/history/{unit_id}", response_model=HistoryResponse, tags=["Данные Оборудования"]) 
+async def get_unit_history(unit_id: int):
+    if httpx_client is None:
+        raise HTTPException(status_code=500, detail="HTTP клиент не инициализирован.")
 
     try:
-        processed_input_array = preprocess_single_sequence_for_inference(request.sequence_data)
-        predicted_rul = ml_model.predict(processed_input_array.reshape(1, -1)).item()
-        
-        status_ru, status_code, status_color = get_rul_status(predicted_rul)
-
-        return PredictionResponse(
-            unit_id=request.unit_id,
-            predicted_rul=predicted_rul,
-            status_ru=status_ru,
-            status_code=status_code,
-            status_color=status_color,
-            reason=f"Прогноз RUL: {predicted_rul:.2f} циклов. Модель CatBoost." 
-        )
-
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=f"Ошибка в данных запроса: {ve}. Проверьте формат.")
+        data_response = await httpx_client.get(f"{cfg.DATA_SERVICE_URL}/history/{unit_id}")
+        data_response.raise_for_status()
+        return HistoryResponse(**data_response.json())
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Data Service Error: {e.response.text}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Невозможно подключиться к Data-сервису: {e}")
     except Exception as e:
         import traceback
+        print(f"[{datetime.now().isoformat()}] History Error in Gateway: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Ошибка сервера при выполнении предсказания: {e}. Проверьте логи сервиса.")
+        raise HTTPException(status_code=500, detail=f"Ошибка Gateway при перенаправлении истории: {e}")
 
 
-@app.get("/api/history/{unit_id}", response_model=HistoryResponse, tags=["Данные Оборудования"])
-async def get_unit_history_api(unit_id: int): # Changed function name
-    global global_historical_data_raw, df_true_test_rul, selected_features # Используем raw_data
-
-    if global_historical_data_raw is None or df_true_test_rul is None or selected_features is None or df_all_processed_history_data is None:
-        raise HTTPException(status_code=503, detail="Исторические данные или ML ресурсы не загружены.")
-
-    # Используем сырые данные для получения оригинальных значений
-    unit_raw_data_full_df = global_historical_data_raw[global_historical_data_raw['unit_number'] == unit_id]
-    if unit_raw_data_full_df.empty:
-        raise HTTPException(status_code=404, detail=f"Исторические данные для оборудования ID {unit_id} не найдены.")
+@app.get("/api/equipment_list", response_model=List[int], tags=["Данные Оборудования"]) 
+async def get_equipment_list():
+    if httpx_client is None:
+        raise HTTPException(status_code=500, detail="HTTP клиент не инициализирован.")
     
-    # Расчет pseudo_RUL
-    true_rul_val_from_file_series = df_true_test_rul[df_true_test_rul['unit_number'] == unit_id]['RUL_true']
-    if true_rul_val_from_file_series.empty:
-         true_rul_val_from_file = float(cfg.RUL_CAP)
-    else:
-         true_rul_val_from_file = true_rul_val_from_file_series.iloc[0]
-
-
-    history_list: List[HistoryDataPointSimplified] = []
-    
-    # Формируем список feature_names, которые отдаем (они должны быть в том же порядке, как raw_feature_values)
-    output_feature_names_for_history = []
-    output_feature_names_for_history.extend(cfg.OP_SETTING_COLS)
-    for s_idx in range(1, 22):
-        s_name = f'sensor_{s_idx}'
-        if s_name not in cfg.IRRELEVANT_SENSORS_INDICES: 
-            output_feature_names_for_history.append(s_name)
-        # Добавляем фильтрованные сенсоры
-        if s_idx in cfg.NOISY_SENSORS_FOR_FILTER_INDICES:
-            output_feature_names_for_history.append(f'{s_name}_filtered')
-    
-    # Добавляем FFT признаки, если включены
-    if cfg.USE_FFT_FEATURES:
-        for s_idx in cfg.VIBRATION_SENSORS_FOR_FFT_INDICES:
-            s_name = f'sensor_{s_idx}'
-            for bin_idx in range(cfg.FFT_BINS_COUNT):
-                output_feature_names_for_history.append(f'{s_name}_fft_bin{bin_idx}_mean')
-                output_feature_names_for_history.append(f'{s_name}_fft_bin{bin_idx}_max')
-
-
-    for _, row in unit_raw_data_full_df.iterrows():
-        current_cycle = row['time_in_cycles']
-        last_cycle_of_unit_in_test_set = row['max_cycle_in_unit']
-
-        pseudo_true_rul_for_display = (true_rul_val_from_file + (last_cycle_of_unit_in_test_set - current_cycle)).clip(lower=0, upper=cfg.RUL_CAP)
-        
-        raw_values_for_display = []
-        for feat_name in output_feature_names_for_history:
-            # Убедитесь, что эта фича существует в `row` (для filtered/fft).
-            # В `unit_raw_data_full_df` будут только исходные сырые колонки.
-            # Фильтрованные и FFT-колонки появились после `preprocess_features`
-            # Это значит, что для отдачи `filtered/fft` через этот эндпоинт,
-            # мы должны отдавать не из `unit_raw_data_full_df`, а из `df_all_processed_history_data`.
-            # Это важный момент!
-            
-            # --- ИСПРАВЛЕНИЕ: Берем фичи из df_all_processed_history_data, а не unit_raw_data_full_df ---
-            processed_row = df_all_processed_history_data[(df_all_processed_history_data['unit_number'] == unit_id) & 
-                                                          (df_all_processed_history_data['time_in_cycles'] == current_cycle)]
-            if not processed_row.empty and feat_name in processed_row.columns:
-                 raw_values_for_display.append(float(processed_row[feat_name].iloc[0])) #iloc[0] для извлечения скаляра
-            else:
-                 raw_values_for_display.append(0.0) # Заглушка, если нет данных (редко)
-            # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-
-
-        history_list.append(HistoryDataPointSimplified(
-            time_in_cycles=current_cycle,
-            true_rul_at_cycle=float(pseudo_true_rul_for_display),
-            raw_feature_values=raw_values_for_display,
-        ))
-            
-    return HistoryResponse(unit_id=unit_id, history=history_list, 
-                           feature_names=output_feature_names_for_history, 
-                           original_feature_order=_full_raw_column_names)
-
-
-@app.get("/api/equipment_list", response_model=List[int], tags=["Данные Оборудования"])
-async def get_equipment_list_api(): # Changed function name
-    if global_historical_data_raw is None:
-        raise HTTPException(status_code=503, detail="Исторические данные не загружены.")
-    
-    return sorted(global_historical_data_raw['unit_number'].unique().tolist())
+    try:
+        data_response = await httpx_client.get(f"{cfg.DATA_SERVICE_URL}/equipment_list")
+        data_response.raise_for_status()
+        return data_response.json() # Возвращаем список ints напрямую
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Data Service Error: {e.response.text}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Невозможно подключиться к Data-сервису: {e}")
+    except Exception as e:
+        import traceback
+        print(f"[{datetime.now().isoformat()}] Equipment List Error in Gateway: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Ошибка Gateway при получении списка: {e}")
 
 
 @app.get("/api/status_summary", response_model=List[EquipmentStatusSummary], tags=["Обзор Статусов"])
-async def get_all_equipment_status_summary_api(): # Changed function name
-    if global_historical_data_raw is None or ml_model is None or scaler is None or selected_features is None or df_all_processed_history_data is None:
-        raise HTTPException(status_code=503, detail="ML ресурсы не загружены для сводки статусов.")
-    
-    unique_units = df_all_processed_history_data['unit_number'].unique().tolist()
-    all_summaries: List[EquipmentStatusSummary] = []
+async def get_all_equipment_status_summary():
+    if httpx_client is None:
+        raise HTTPException(status_code=500, detail="HTTP клиент не инициализирован.")
 
-    # Готовим данные для массового инференса CatBoost
-    # Берем последние срезы из полностью предобработанных данных (которые теперь включают фильтры и FFT)
-    X_predict_ready_for_summary = generate_flat_test_features_for_boosting(df_all_processed_history_data, selected_features, cfg.SEQUENCE_LENGTH)
+    try:
+        data_response = await httpx_client.get(f"{cfg.DATA_SERVICE_URL}/status_summary")
+        data_response.raise_for_status()
+        return data_response.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Data Service Error: {e.response.text}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Невозможно подключиться к Data-сервису: {e}")
+    except Exception as e:
+        import traceback
+        print(f"[{datetime.now().isoformat()}] Status Summary Error in Gateway: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Ошибка Gateway при получении сводки: {e}")
 
-    if len(X_predict_ready_for_summary) != len(unique_units):
-        print(f"Warning: Discrepancy in unit count for summary: unique_units={len(unique_units)}, X_predict_ready_for_summary={len(X_predict_ready_for_summary)}")
-
-    predictions = ml_model.predict(X_predict_ready_for_summary) # Массовое предсказание CatBoost
-    
-    for i, unit_id in enumerate(unique_units):
-        predicted_rul = predictions[i]
-        status_ru, status_code, status_color = get_rul_status(predicted_rul)
-        
-        all_summaries.append(EquipmentStatusSummary(
-            unit_id=int(unit_id),
-            current_rul=float(predicted_rul),
-            status_ru=status_ru,
-            status_code=status_code,
-            status_color=status_color,
-            last_updated=pd.Timestamp.now().strftime("%H:%M:%S")
-        ))
-    
-    status_order = {'critical': 1, 'warning': 2, 'normal': 3}
-    all_summaries.sort(key=lambda x: status_order[x.status_code])
-    
-    return all_summaries
 
 @app.get("/api/health", tags=["Утилиты"])
-async def health_check():
-    if ml_model is not None and scaler is not None and selected_features is not None:
-        return {"status": "ok", "message": "Backend API готов к работе (ML загружен)."}
+async def health_check_gateway():
+    """Проверяет работоспособность Gateway и базовых подключений к микросервисам."""
+    
+    status_ml = {"status": "unreachable"}
+    status_data = {"status": "unreachable"}
+    
+    if httpx_client is None:
+        return {"status": "gateway_uninitialized", "message": "HTTP client is not ready. Gateway cannot function.", "services": {"ml": status_ml, "data": status_data}}
+
+    try:
+        ml_resp = await httpx_client.get(f"{cfg.ML_SERVICE_URL}/health")
+        ml_resp.raise_for_status()
+        status_ml = ml_resp.json()
+    except Exception as e:
+        status_ml["message"] = f"Error: {e}"
+
+    try:
+        data_resp = await httpx_client.get(f"{cfg.DATA_SERVICE_URL}/health")
+        data_resp.raise_for_status()
+        status_data = data_resp.json()
+    except Exception as e:
+        status_data["message"] = f"Error: {e}"
+
+    if status_ml.get("status") == "ok" and status_data.get("status") == "ok":
+        return {"status": "ok", "message": "API Gateway и все сервисы готовы.", "services": {"ml": status_ml, "data": status_data}}
     else:
-        raise HTTPException(status_code=503, detail="Backend API инициализируется или имеет ошибки загрузки ML.")
+        raise HTTPException(status_code=503, detail="Некоторые сервисы не готовы или недоступны.", 
+                            headers={"X-Service-Status": json.dumps({"ml": status_ml, "data": status_data})})

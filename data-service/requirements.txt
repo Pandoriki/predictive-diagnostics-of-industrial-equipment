@@ -1,0 +1,10 @@
+# data-service/requirements.txt
+# Зависимости для Data Service
+fastapi
+uvicorn[standard]
+python-multipart
+pandas
+numpy
+scikit-learn            # <<< НОВОЕ: ДОБАВИТЬ ЭТУ СТРОКУ
+joblib
+# torch # Не нужен

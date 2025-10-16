@@ -1,52 +1,88 @@
-# docker-compose.yml
 version: '3.8'
 
 services:
+  # --- 1. API GATEWAY (ОСНОВНОЙ БЭКЕНД) ---
   backend:
     build:
       context: .
-      dockerfile: backend/Dockerfile.backend # Путь к вашему FastAPI бэкенду
+      dockerfile: backend/Dockerfile.backend # Путь к Dockerfile бэкенда
     ports:
-      - "8080:8000" # Проксируем внешний порт 8080 на внутренний порт FastAPI 8000
+      - "8080:8000"              # Frontend обращается сюда: http://localhost:8080
     networks:
       - pdm-network
     environment:
-      # FastAPI бэкенд не вызывает сам ML-сервис. Все внутри одного контейнера.
-      # Но этот путь нужен для инициализации:
-      MODELS_DIR: "/app/models" # Убедитесь, что main.py использует этот ENV или напрямую путь
-      PYTHONPATH: "/app" # Critical for finding src/ and configs/
-      # В Production, NEXT_PUBLIC_API_URL должен быть вашим реальным URL (e.g. your_domain.com/api)
-      # Для Docker Compose это адрес сервиса "backend" и его порт 8080, как его видит FrontEnd
-      NEXT_PUBLIC_API_URL: "http://localhost:8080/api" # Указан localhost для фронтенда из браузера
+      # URL других сервисов в Docker-сети
+      ML_SERVICE_URL: "http://ml-service:8000"   # Обратите внимание на имя сервиса и порт
+      DATA_SERVICE_URL: "http://data-service:8000" # Обратите внимание на имя сервиса и порт
+      PYTHONPATH: "/app"         # Путь, где лежат configs/, src/
+    volumes:                     # Для локальной разработки/отладки
+      - ./backend:/app/backend # Весь код бэкенда
+      - ./configs:/app/configs   # Общие конфиги
+      - ./src:/app/src           # Общая ML-логика
+    depends_on:                  # Backend зависит от запуска ML и Data сервисов
+      - ml-service
+      - data-service
+    restart: unless-stopped      
 
-    # volumes: # Для отладки (разкомментируйте, если хотите hot-reload Python-кода)
-    #   - ./backend:/app/backend
-    #   - ./models:/app/models # Для доступа к .cbm и .pkl, если не хотите копировать в Dockerfile
-    #   - ./configs:/app/configs
-    #   - ./src:/app/src
-    restart: unless-stopped # Перезапускать сервис, если он упал
-
-  frontend:
+  # --- 2. ML INFERENCE SERVICE (Только предсказания CatBoost) ---
+  ml-service:
     build:
       context: .
-      dockerfile: frontend/Dockerfile.frontend # Путь к вашему Next.js фронтенду
-    ports:
-      - "3000:3000" # Проксируем внешний порт 3000 на внутренний порт Next.js 3000
+      dockerfile: ml-service/Dockerfile.ml # Путь к Dockerfile ML-сервиса
+    # Порт 8000 НЕ выставлен наружу, доступ только из backend
     networks:
       - pdm-network
-    depends_on:
-      - backend # Фронтенд зависит от бэкенда
     environment:
-      # Важно: Front-end видит бэкенд по URL `http://localhost:8080/api` с точки зрения браузера
-      # Это позволяет напрямую делать запросы через NGINX или Next.js proxy
-      NEXT_PUBLIC_API_URL: "http://localhost:8080/api"
-      NEXT_PUBLIC_USE_MOCKS: "false" # <<< Устанавливаем в false, чтобы использовать реальный бэкенд!
+      # ML_SERVICE_URL, DATA_SERVICE_URL здесь не нужны
+      MODELS_DIR: "/app/models" # Путь к моделям внутри контейнера
+      PYTHONPATH: "/app"        # Путь, где лежат configs/, src/
+    volumes:                    # Для доступа к обученной модели, скейлеру, данным
+      - ./models:/app/models     # ML-артефакты (CatBoost, scaler)
+      - ./configs:/app/configs   # Конфиги
+      - ./src:/app/src           # ML-логика (для предобработки)
+      # raw_data здесь не нужен, т.к. этот сервис получает сырые данные с запросом
+    restart: unless-stopped
 
-    # volumes: # Для отладки фронтенда (hot-reload React-кода)
-    #   - ./frontend:/app/frontend
-    #   - /app/frontend/node_modules # Чтобы не перезаписывал node_modules в контейнере
-    #   - /app/frontend/.next        # Чтобы не перезаписывал .next build files
+  # --- 3. DATA SERVICE (Имитация БД для истории и списков) ---
+  data-service:
+    build:
+      context: .
+      dockerfile: data-service/Dockerfile.data # Путь к Dockerfile Data-сервиса
+    # Порт 8000 НЕ выставлен наружу
+    networks:
+      - pdm-network
+    environment:
+      # DATA_RAW_DIR указывает на '/app/data/raw/' внутри контейнера
+      PYTHONPATH: "/app"         
+    volumes:                     # !!! ДЛЯ ПЕРЕНОСА ДАННЫХ И ВОСПРОИЗВОДИМОСТИ !!!
+      - ./data:/app/data         # Сырые данные CMAPSS (монтируем папку `data` в контейнер)
+      - ./configs:/app/configs   # Конфиги
+      - ./src:/app/src           # data_preprocessing.py (для load_data)
+    restart: unless-stopped
+    # Опционально: VOLUME /app/data # Можно определить именованный volume здесь для data persistent
+                                  # и удалить строку volumes: - ./data:/app/data
 
+  # --- 4. FRONTEND SERVICE (Остается пока вне фокуса, но будет подключен) ---
+  # frontend: # Это пример. Если вы его используете, он будет тут.
+  #   build:
+  #     context: .
+  #     dockerfile: frontend/Dockerfile.frontend
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - pdm-network
+  #   depends_on:
+  #     - backend # Теперь фронтенд зависит от API Gateway
+  #   environment:
+  #     # Фронтенд будет обращаться к внешнему порту 8080 основного бэкенда.
+  #     NEXT_PUBLIC_API_URL: "http://localhost:8080/api"
+  #     NEXT_PUBLIC_USE_MOCKS: "true" # Выставляем false для продакшена
+  #   volumes:
+  #     - ./frontend:/app/frontend # Для hot-reload в разработке
+  #     - /app/frontend/node_modules # Чтобы не перезаписывал (для Windows/Docker cache)
+  #     - /app/frontend/.next        # Чтобы не перезаписывал
+
+# --- ОПРЕДЕЛЕНИЕ СЕТИ ---
 networks:
   pdm-network:
-    driver: bridge
+    driver: bridge # Docker сеть для взаимодействия микросервисов
