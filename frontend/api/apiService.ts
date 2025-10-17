@@ -30,7 +30,7 @@ export const fetchStatusSummary = async (): Promise<BackendStatusSummary[]> => {
  * @param {number} unitId - Числовой ID оборудования.
  * @returns {Promise<BackendHistoryResponse>} Промис, который разрешается в объект с историей.
  */
-export const fetchEquipmentHistory = async (unitId: number): Promise<BackendHistoryResponse> => {
+export const fetchEquipmentHistory = async (unitId: number): Promise<HistoryData> => {
     console.log(`[API] Запрос истории для оборудования с ID: ${unitId}`);
     
     const response = await fetch(`${API_BASE_URL}/history/${unitId}`);
@@ -41,12 +41,12 @@ export const fetchEquipmentHistory = async (unitId: number): Promise<BackendHist
         throw new Error(`Ошибка сети при запросе истории: ${response.status}`);
     }
 
-    return await response.json() as BackendHistoryResponse;
+    return await response.json() as HistoryData;
 };
 
 export const fetchHistoryData = async (unitId: number): Promise<HistoryData> => {
   const cleanUnitId = String(unitId).replace('#', '');
-  const response = await fetch(`http://localhost:8080/api/history/${cleanUnitId}`);
+  const response = await fetch(`${API_BASE_URL}/history/${cleanUnitId}`);
   if (!response.ok) {
     throw new Error(`Не удалось загрузить историю для оборудования #${cleanUnitId}`);
   }
