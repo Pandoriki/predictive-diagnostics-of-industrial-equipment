@@ -1,7 +1,7 @@
 // frontend/api/apiService.ts
 
 // Импортируем типы, которые описывают ответы от нашего API
-import { BackendStatusSummary, BackendHistoryResponse } from '../types';
+import { BackendStatusSummary, HistoryData } from '../types';
 
 // Базовый URL для всех запросов. Берется из переменных окружения.
 const API_BASE_URL = '/api';
@@ -42,4 +42,13 @@ export const fetchEquipmentHistory = async (unitId: number): Promise<BackendHist
     }
 
     return await response.json() as BackendHistoryResponse;
+};
+
+export const fetchHistoryData = async (unitId: number): Promise<HistoryData> => {
+  const cleanUnitId = String(unitId).replace('#', '');
+  const response = await fetch(`http://localhost:8080/api/history/${cleanUnitId}`);
+  if (!response.ok) {
+    throw new Error(`Не удалось загрузить историю для оборудования #${cleanUnitId}`);
+  }
+  return response.json();
 };

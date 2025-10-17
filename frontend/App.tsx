@@ -1,21 +1,38 @@
 // src/App.tsx (или ваш главный файл)
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Theme, View } from './types';
+import { Theme, View, Equipment } from './types';
 
 // Импортируем все компоненты
 import Header from './components/Header';
+import EngineerDashboardView from './components/EngineerDashboardView'
 import EquipmentListView from './components/EquipmentListView';
 import GuardDashboardView from './components/GuardDashboardView'; // <-- Не забудьте импортировать
 import WebGLBackground from './components/WebGLBackground';
 
 function App() {
-  const [theme, setTheme] = useState<Theme>(Theme.Dark);
-  const [view, setView] = useState<View>(View.List);
+
   
   const headerRef = useRef<HTMLDivElement>(null);
   const [isScrollButtonVisible, setScrollButtonVisible] = useState(false);
+const [theme, setTheme] = useState<Theme>(Theme.Dark);
+  const [view, setView] = useState<View>(View.List);
+  const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null);
 
+  const handleSelectEquipment = (equipment: Equipment) => {
+    setSelectedEquipment(equipment);
+    setView(View.Engineer);
+  };
+
+  const handleCloseEngineerDashboard = () => {
+    setView(View.List);
+    // setSelectedEquipment(null); // Оставляем, чтобы кнопка "Инженер" оставалась активной
+  };
+  
+  const handleLogoClick = () => {
+    setView(View.List);
+    setSelectedEquipment(null); // Сбрасываем при клике на логотип
+  };
   useEffect(() => {
     const handleScroll = () => {
       if (headerRef.current) {
@@ -27,11 +44,6 @@ function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Функция для обработки клика по оборудованию (может быть разной для разных панелей)
-  const handleSelectEquipment = (equipment: any) => {
-    console.log("Выбрано оборудование:", equipment.id);
-    // Здесь может быть логика открытия модального окна и т.д.
-  };
 
   return (
     <>
@@ -63,7 +75,13 @@ function App() {
           )}
 
           {/* Можно добавить и для инженера, когда он будет готов */}
-          {/* {view === View.Engineer && <EngineerDashboardView />} */}
+         {view === View.Engineer && selectedEquipment && (
+            <EngineerDashboardView
+              theme={theme}
+              initialEquipment={selectedEquipment} // <-- Передаем initialEquipment
+              onClose={handleCloseEngineerDashboard}
+            />
+          )}
         </main>
       </div>
     </>

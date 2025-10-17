@@ -54,3 +54,17 @@ export interface BackendStatusSummary {
   status_color: 'зеленый' | 'желтый' | 'красный';
   last_updated: string;
 }
+
+export interface HistoryData {
+  unit_id: number;
+  time_in_cycles: number[];
+  rul_history: number[];
+  sensor_data: {
+    [sensorName: string]: number[];
+  };
+}
+
+export interface ChartDataPoint {
+  cycle: number;
+  [key: string]: number; // Для RUL, сенсоров и т.д.
+}
