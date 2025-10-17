@@ -1,65 +1,73 @@
-import React, { useState, useEffect } from 'react';
-import { Theme, View, Equipment } from './types';
-import { mockEquipmentData } from './constants';
+// src/App.tsx (или ваш главный файл)
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Theme, View } from './types';
+
+// Импортируем все компоненты
 import Header from './components/Header';
 import EquipmentListView from './components/EquipmentListView';
-import EngineerDashboardView from './components/EngineerDashboardView';
-import GuardDashboardView from './components/GuardDashboardView';
+import GuardDashboardView from './components/GuardDashboardView'; // <-- Не забудьте импортировать
 import WebGLBackground from './components/WebGLBackground';
 
-const App: React.FC = () => {
+function App() {
   const [theme, setTheme] = useState<Theme>(Theme.Dark);
   const [view, setView] = useState<View>(View.List);
-  const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null);
+  
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [isScrollButtonVisible, setScrollButtonVisible] = useState(false);
 
   useEffect(() => {
-    if (theme === Theme.Dark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [theme]);
+    const handleScroll = () => {
+      if (headerRef.current) {
+        const isHeaderHidden = headerRef.current.getBoundingClientRect().bottom < 0;
+        setScrollButtonVisible(isHeaderHidden);
+      }
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
-  const handleSelectEquipment = (equipment: Equipment) => {
-    setSelectedEquipment(equipment);
-    setView(View.Engineer);
+  // Функция для обработки клика по оборудованию (может быть разной для разных панелей)
+  const handleSelectEquipment = (equipment: any) => {
+    console.log("Выбрано оборудование:", equipment.id);
+    // Здесь может быть логика открытия модального окна и т.д.
   };
 
-  const handleReturnToList = () => {
-    setSelectedEquipment(null);
-    setView(View.List);
-  };
-    
   return (
-    <div className="min-h-screen w-full transition-colors duration-500">
+    <>
       <WebGLBackground theme={theme} />
-      <div className="min-h-screen w-full bg-gradient-to-br dark:from-black/60 dark:to-black/80 from-white/10 to-white/30 backdrop-blur-sm">
-        <main className="container mx-auto px-4 py-6 text-slate-800 dark:text-gray-100">
-          {view !== View.Guard && (
-            <Header 
-              view={view} 
-              setView={setView} 
-              theme={theme} 
-              setTheme={setTheme}
-              onLogoClick={handleReturnToList}
+      <div className="container mx-auto p-4 md:p-6 space-y-6">
+        <Header 
+          ref={headerRef}
+          view={view} 
+          setView={setView} 
+          theme={theme} 
+          setTheme={setTheme} 
+          onLogoClick={() => setView(View.List)} 
+        />
+        <main>
+          {/* --- ВОТ КЛЮЧЕВАЯ ЛОГИКА ПЕРЕКЛЮЧЕНИЯ --- */}
+          {view === View.List && (
+            <EquipmentListView 
+              theme={theme}
+              onSelectEquipment={handleSelectEquipment}
+              isScrollButtonVisible={isScrollButtonVisible}
             />
           )}
 
-          <div className={view !== View.Guard ? "mt-8" : ""}>
-            {view === View.List && (
-              <EquipmentListView 
-                equipmentData={mockEquipmentData} 
-                onSelectEquipment={handleSelectEquipment} 
-                theme={theme}
-              />
-            )}
-            {view === View.Engineer && selectedEquipment && <EngineerDashboardView equipment={selectedEquipment} theme={theme} />}
-            {view === View.Guard && <GuardDashboardView equipmentData={mockEquipmentData} onSelectEquipment={handleSelectEquipment} />}
-          </div>
+          {view === View.Guard && (
+            <GuardDashboardView 
+              theme={theme}
+              onSelectEquipment={handleSelectEquipment}
+            />
+          )}
+
+          {/* Можно добавить и для инженера, когда он будет готов */}
+          {/* {view === View.Engineer && <EngineerDashboardView />} */}
         </main>
       </div>
-    </div>
+    </>
   );
-};
+}
 
 export default App;

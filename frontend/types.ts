@@ -1,9 +1,15 @@
 
-export enum Status {
-  Normal = 'НОРМАЛЬНО',
-  Warning = 'ТРЕБУЕТ ОБСЛУЖИВАНИЯ',
-  Critical = 'КРИТИЧЕСКОЕ СОСТОЯНИЕ',
+export interface SensorDataPoint {
+  cycle: number;
+  value: number;
 }
+
+export interface RulDataPoint {
+  cycle: number;
+  predicted: number;
+  actual: number;
+}
+// frontend/types.ts
 
 export enum Theme {
   Light = 'light',
@@ -16,32 +22,35 @@ export enum View {
   Guard = 'guard',
 }
 
-export interface SensorDataPoint {
-  cycle: number;
-  value: number;
+export enum Status {
+  Normal = 'Нормально',
+  Warning = 'Предупреждение',
+  Critical = 'Критическое',
 }
 
-export interface RulDataPoint {
-  cycle: number;
-  predicted: number;
-  actual: number;
-}
-
+// Describe la estructura de datos que usa la UI.
+// Es importante que incluya `last_updated`.
 export interface Equipment {
   id: string;
   name: string;
   status: Status;
   rul: number;
-  rulUnit: 'циклов' | 'дн.';
+  rulUnit: string;
+  last_updated: string; // <-- Campo crucial
   type: string;
   model: string;
   lastWarning: string;
   degradationReason: string;
-  rulHistory: RulDataPoint[];
-  sensors: {
-    [key: string]: {
-      name: string;
-      data: SensorDataPoint[];
-    };
-  };
+  rulHistory: any[];
+  sensors: any;
+}
+
+// Describe la respuesta EXACTA que viene de la API.
+export interface BackendStatusSummary {
+  unit_id: number;
+  current_rul: number;
+  status_ru: string;
+  status_code: 'normal' | 'warning' | 'critical';
+  status_color: 'зеленый' | 'желтый' | 'красный';
+  last_updated: string;
 }

@@ -76,7 +76,7 @@ app = FastAPI(
     title="Предиктивная Диагностика: Data Service",
     description="Микросервис для доступа к имитации исторических данных оборудования.",
     version="1.0.0",
-    lifespan=lifespan 
+    lifespan=lifespan
 )
 
 # --- MIDDLEWARE: CORS ---

@@ -1,0 +1,110 @@
+@font-face {
+  font-family: 'Yandex Sans Text';
+  src: url('/fonts/YandexSansText-Regular.woff2') format('woff2'),
+       url('/fonts/YandexSansText-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Yandex Sans Text';
+  src: url('/fonts/YandexSansText-Medium.woff2') format('woff2'),
+       url('/fonts/YandexSansText-Medium.woff') format('woff');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Yandex Sans Text';
+  src: url('/fonts/YandexSansText-Bold.woff2') format('woff2'),
+       url('/fonts/YandexSansText-Bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+body {
+  font-family: 'Yandex Sans Text', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- ГЛОБАЛЬНОЕ СКРЫТИЕ СКРОЛЛБАРА ДЛЯ ВСЕЙ СТРАНИЦЫ --- */
+/* Нацеливаемся на <html>, так как именно он чаще всего имеет скролл */
+html {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;  /* IE 10+ */
+}
+html::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Для Chrome, Safari, Opera и новых версий Edge */
+body::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out forwards;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.critical-glow {
+  position: relative;
+  z-index: 1; /* Убедимся, что карточка выше псевдо-элемента */
+}
+
+/* Создаем псевдо-элемент для свечения */
+.critical-glow::after {
+  content: '';
+  position: absolute;
+  /* Располагаем его чуть-чуть за пределами карточки */
+  top: -4px; 
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  z-index: -1; /* Помещаем его ПОД карточку */
+  
+  /* Используем цвет статуса и размытие для создания "glow" эффекта */
+  background: rgb(239 68 68); /* Цвет из statusConfig (red-500) */
+  filter: blur(15px);
+  
+  /* Наследуем скругление углов от родительской карточки */
+  border-radius: inherit; 
+  
+  /* АНИМИРУЕМ ТОЛЬКО ПРОЗРАЧНОСТЬ - ЭТО ОЧЕНЬ БЫСТРО */
+  animation: subtle-glow 4s ease-in-out infinite;
+}
+
+/* Сама анимация - медленное появление и затухание */
+@keyframes subtle-glow {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.35; /* Пиковая яркость - очень приглушенная */
+  }
+  100% {
+    opacity: 0;
+  }
+}
