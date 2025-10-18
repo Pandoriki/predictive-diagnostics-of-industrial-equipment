@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/equipment-history.schema.json",
+  "title": "Equipment History Data",
+  "description": "Schema for equipment operational history and sensor data",
+  "type": "object",
+  "properties": {
+    "unit_id": {
+      "description": "Unique identifier for the equipment unit",
+      "type": "integer"
+    },
+    "time_in_cycles": {
+      "description": "Array of time measurements in operational cycles",
+      "type": "array",
+      "items": {
+        "type": "integer"
+      }
+    },
+    "rul_history": {
+      "description": "Array of Remaining Useful Life (RUL) values over time",
+      "type": "array",
+      "items": {
+        "type": "integer"
+      }
+    },
+    "sensor_data": {
+      "description": "Sensor measurements",
+      "type": "object",
+      "properties": {
+        "sensor_1": {"type": "array", "items": {"type": "number"}},
+        "sensor_2": {"type": "array", "items": {"type": "number"}},
+        "sensor_3": {"type": "array", "items": {"type": "number"}},
+        "sensor_4": {"type": "array", "items": {"type": "number"}},
+        "sensor_5": {"type": "array", "items": {"type": "number"}},
+        "sensor_6": {"type": "array", "items": {"type": "number"}},
+        "sensor_7": {"type": "array", "items": {"type": "number"}},
+        "sensor_8": {"type": "array", "items": {"type": "number"}},
+        "sensor_9": {"type": "array", "items": {"type": "number"}},
+        "sensor_10": {"type": "array", "items": {"type": "number"}},
+        "sensor_11": {"type": "array", "items": {"type": "number"}},
+        "sensor_12": {"type": "array", "items": {"type": "number"}},
+        "sensor_13": {"type": "array", "items": {"type": "number"}},
+        "sensor_14": {"type": "array", "items": {"type": "number"}},
+        "sensor_15": {"type": "array", "items": {"type": "number"}},
+        "sensor_16": {"type": "array", "items": {"type": "number"}},
+        "sensor_17": {"type": "array", "items": {"type": "integer"}},
+        "sensor_18": {"type": "array", "items": {"type": "integer"}},
+        "sensor_19": {"type": "array", "items": {"type": "integer"}},
+        "sensor_20": {"type": "array", "items": {"type": "number"}},
+        "sensor_21": {"type": "array", "items": {"type": "number"}}
+      }
+    }
+  }
+}

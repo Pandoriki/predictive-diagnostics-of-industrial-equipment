@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/engine-health-schema.json",
+  "title": "Engine Health Prediction",
+  "description": "Схема для прогноза остаточного ресурса двигателя",
+  "type": "object",
+  "properties": {
+    "unit_id": {
+      "type": "integer",
+      "description": "Уникальный идентификатор двигателя",
+      "minimum": 1
+    },
+    "predicted_rul": {
+      "type": "number",
+      "description": "Прогнозируемый остаточный ресурс (Remaining Useful Life)",
+      "minimum": 0
+    },
+    "status_ru": {
+      "type": "string",
+      "description": "Статус на русском языке"
+    },
+    "status_code": {
+      "type": "string",
+      "description": "Код статуса на английском",
+      "enum": ["normal", "warning", "critical"]
+    },
+    "status_color": {
+      "type": "string",
+      "description": "Цвет индикации статуса",
+      "enum": ["зеленый", "желтый", "красный"]
+    },
+    "reason": {
+      "type": "string",
+      "description": "Обоснование прогноза"
+    }
+  },
+  "required": [
+    "unit_id",
+    "predicted_rul", 
+    "status_ru",
+    "status_code",
+    "status_color",
+    "reason"
+  ],
+  "additionalProperties": false
+}

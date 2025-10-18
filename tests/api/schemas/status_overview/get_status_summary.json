@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "unit_id": {"type": "integer"},
+      "current_rul": {"type": "number"},
+      "status_ru": {"type": "string"},
+      "status_code": {"type": "string"},
+      "status_color": {"type": "string"},
+      "last_updated": {"type": "string"}
+    }
+  }
+}
