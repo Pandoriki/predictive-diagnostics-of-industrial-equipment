@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # --- 1. API GATEWAY (ОСНОВНОЙ БЭКЕНД) ---
   backend:
     build:
       context: .
@@ -22,7 +21,6 @@ services:
       - ./backend/requirements.txt:/app/requirements.txt 
     restart: unless-stopped      
 
-  # --- 2. ML INFERENCE SERVICE ---
   ml-service:
     build:
       context: .
@@ -40,7 +38,6 @@ services:
                                  # Либо: backend/app.main сам загрузит, и не надо будет для ml-service
     restart: unless-stopped
 
-  # --- 3. DATA SERVICE ---
   data-service:
     build:
       context: .
@@ -54,7 +51,7 @@ services:
       - ./configs:/app/configs 
       - ./src:/app/src           
     restart: unless-stopped
-  # --- 4. FRONTEND SERVICE (НОВЫЙ!) ---
+
   frontend:
     build:
       context: .
@@ -64,21 +61,15 @@ services:
     depends_on:
       - backend
     environment:
-      # ИЗМЕНЕНИЕ: URL для API теперь указывает на корень и новый путь.
-      # Лучше всего использовать относительный путь. Так фронтенд не будет
-      # привязан к конкретному домену (localhost). Он будет делать запросы
-      # на тот же хост, с которого загрузился.
       VITE_API_URL: "/api" 
       VITE_USE_MOCKS: "false" 
     restart: unless-stopped
 
-  # --- NGINX REVERSE PROXY ---
   nginx:
     build:
       context: ./nginx
       dockerfile: Dockerfile.nginx
     ports:
-      # ИЗМЕНЕНИЕ: Меняем порт на стандартный HTTP порт 80.
       - "80:80"
     networks:
       - pdm-network
@@ -87,7 +78,6 @@ services:
       - frontend
     restart: unless-stopped
 
-# --- ОПРЕДЕЛЕНИЕ СЕТИ ---
 networks:
   pdm-network:
     driver: bridge

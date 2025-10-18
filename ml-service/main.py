@@ -13,7 +13,6 @@ from typing import List, Optional, Literal
 
 from sklearn.preprocessing import MinMaxScaler 
 
-# Импорты ML-логики (доступны благодаря PYTHONPATH=/app)
 import configs.config as cfg
 from src.data_preprocessing import preprocess_features 
 from src.predict_utils import get_rul_status 
@@ -24,8 +23,6 @@ ml_model: Optional[CatBoostRegressor] = None
 scaler: Optional[MinMaxScaler] = None 
 selected_features: Optional[List[str]] = None
 
-
-# --- Pydantic модели (копии, т.к. этот сервис автономен) ---
 _full_raw_column_names = ['unit_number', 'time_in_cycles'] + cfg.OP_SETTING_COLS + cfg.ALL_SENSOR_COLS
 
 class SensorDataPoint(BaseModel):
@@ -72,13 +69,11 @@ class PredictionResponse(BaseModel):
 
 # (другие модели не нужны для ML-сервиса, т.к. он только предсказывает)
 
-# --- Контекстный менеджер FastAPI для событий Startup/Shutdown ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("ML-Service APP: Запуск сервиса. Загрузка ML ресурсов...")
     try:
-        global ml_model, scaler, selected_features # Объявляем глобальные переменные
-        
+        global ml_model, scaler, selected_features
         model_path_cbm = os.path.join(cfg.MODELS_DIR, 'rul_prediction_model.cbm') 
         scaler_path = os.path.join(cfg.MODELS_DIR, 'scaler.pkl')
         features_path = os.path.join(cfg.MODELS_DIR, 'selected_features.pkl')
@@ -132,14 +127,14 @@ def _preprocess_single_sequence_for_inference(raw_sequence_data: List[SensorData
     Выполняет полный пайплайн предобработки для одной последовательности
     сырых данных (от агрегата) перед подачей в CatBoost модель.
     """
-    global ml_model, scaler, selected_features # Доступ к глобальным переменным
+    global ml_model, scaler, selected_features
 
     if scaler is None or selected_features is None or ml_model is None: 
         raise ValueError("ML ресурсы не загружены.")
 
     df_raw_sequence = pd.DataFrame([s.model_dump() for s in raw_sequence_data])
 
-    _full_raw_cols_for_processing = cfg._meaningful_raw_columns # Берем из конфига
+    _full_raw_cols_for_processing = cfg._meaningful_raw_columns
 
     for col in _full_raw_cols_for_processing:
         if col not in df_raw_sequence.columns:
@@ -147,11 +142,9 @@ def _preprocess_single_sequence_for_inference(raw_sequence_data: List[SensorData
     
     df_for_preprocess_actual = df_raw_sequence[_full_raw_cols_for_processing].copy()
 
-    # Заглушка `df_train` для функции `preprocess_features`
     df_train_dummy_cols = _full_raw_cols_for_processing + ['RUL', 'max_cycle_in_unit']
     df_train_dummy = pd.DataFrame(columns=df_train_dummy_cols)
     
-    # Вызов preprocess_features
     _, df_processed_single_sequence, _, _ = \
         preprocess_features(df_train=df_train_dummy.copy(), df_test=df_for_preprocess_actual.copy(), 
                             fit_scaler=False, scaler=scaler, is_single_unit_df=True)
@@ -168,23 +161,19 @@ def _preprocess_single_sequence_for_inference(raw_sequence_data: List[SensorData
 
 @app.post("/predict_rul", response_model=PredictionResponse, tags=["Прогноз RUL"]) 
 async def predict_rul_endpoint(request: PredictionRequest):
-    global ml_model, scaler, selected_features # Объявляем глобальными (хотя тут используются)
+    global ml_model, scaler, selected_features
 
     if ml_model is None or scaler is None or selected_features is None: 
         raise HTTPException(status_code=503, detail="ML сервис не готов. Модель или скейлер не загружены.")
 
     try:
-        # Проверка длины входящей последовательности
         if len(request.sequence_data) != cfg.SEQUENCE_LENGTH: 
              raise HTTPException(status_code=400, detail=f"Ожидается последовательность данных из {cfg.SEQUENCE_LENGTH} циклов. Получено {len(request.sequence_data)}.")
 
-        # Предобработка данных для инференса
         processed_input_array = _preprocess_single_sequence_for_inference(request.sequence_data)
         
-        # Выполнение предсказания
         predicted_rul = ml_model.predict(processed_input_array.reshape(1, -1)).item()
         
-        # Конвертация прогноза RUL в статус
         status_ru, status_code, status_color = get_rul_status(predicted_rul)
 
         return PredictionResponse(
@@ -207,7 +196,7 @@ async def predict_rul_endpoint(request: PredictionRequest):
 
 @app.get("/health", tags=["Утилиты"])
 async def health_check():
-    global ml_model, scaler, selected_features # Объявляем глобальными (хотя тут используются)
+    global ml_model, scaler, selected_features
 
     if ml_model is not None and scaler is not None and selected_features is not None:
         return {"status": "ok", "message": "ML-Inference сервис готов к работе (ML загружен)."}

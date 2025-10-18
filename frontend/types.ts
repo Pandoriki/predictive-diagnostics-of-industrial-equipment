@@ -28,15 +28,13 @@ export enum Status {
   Critical = 'Критическое',
 }
 
-// Describe la estructura de datos que usa la UI.
-// Es importante que incluya `last_updated`.
 export interface Equipment {
   id: string;
   name: string;
   status: Status;
   rul: number;
   rulUnit: string;
-  last_updated: string; // <-- Campo crucial
+  last_updated: string;
   type: string;
   model: string;
   lastWarning: string;
@@ -45,7 +43,6 @@ export interface Equipment {
   sensors: any;
 }
 
-// Describe la respuesta EXACTA que viene de la API.
 export interface BackendStatusSummary {
   unit_id: number;
   current_rul: number;
@@ -66,5 +63,5 @@ export interface HistoryData {
 
 export interface ChartDataPoint {
   cycle: number;
-  [key: string]: number; // Для RUL, сенсоров и т.д.
+  [key: string]: number;
 }

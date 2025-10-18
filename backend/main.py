@@ -1,32 +1,14 @@
-import os
-import numpy as np
-import pandas as pd
-from datetime import datetime
 import json
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager 
 from pydantic import BaseModel, Field
-from typing import List, Optional, Literal, Dict # <-- Добавлен Dict
+from typing import List, Optional, Literal, Dict
 import httpx
 
-# Импорты конфигураций
 import configs.config as cfg
 
-# --- >>>>>>>>>>>> ГЛАВНОЕ ИСПРАВЛЕНИЕ ЗДЕСЬ <<<<<<<<<<<< ---
-# Обновляем Pydantic модели, чтобы они соответствовали data-service
-
-# УДАЛЯЕМ СТАРЫЕ МОДЕЛИ
-# class HistoryDataPointSimplified(BaseModel):
-#     ...
-# class HistoryResponse(BaseModel):
-#     unit_id: int
-#     history: List[HistoryDataPointSimplified]
-#     feature_names: List[str] 
-#     original_feature_order: List[str]
-
-# ДОБАВЛЯЕМ НОВУЮ, ПРАВИЛЬНУЮ МОДЕЛЬ
 class HistoryResponse(BaseModel):
     unit_id: int = Field(..., description="ID оборудования.")
     time_in_cycles: List[int] = Field(..., description="Массив временных циклов, ось X для графиков.")
@@ -34,7 +16,6 @@ class HistoryResponse(BaseModel):
     sensor_data: Dict[str, List[float]] = Field(..., description="Словарь, где ключ - имя датчика, а значение - массив его показаний (ось Y).")
 
 
-# Остальные модели (копируем их из data-service для консистентности)
 class EquipmentStatusSummary(BaseModel):
     unit_id: int
     current_rul: float
@@ -62,13 +43,9 @@ class PredictionResponse(BaseModel):
     status_code: Literal['normal', 'warning', 'critical']
     status_color: Literal['зеленый', 'желтый', 'красный']
     reason: str
-# --- >>>>>>>>>>>> КОНЕЦ ИСПРАВЛЕНИЯ <<<<<<<<<<<< ---
 
-
-# --- GLOBAL HTTPX CLIENT ---
 httpx_client: Optional[httpx.AsyncClient] = None
 
-# --- Контекстный менеджер FastAPI ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("API Gateway: Запуск сервиса...")
@@ -82,13 +59,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Предиктивная Диагностика: API Gateway",
     description="Основной API-шлюз, маршрутизирующий запросы к ML и Data-микросервисам.",
-    version="1.1.0", # Версия обновлена
+    version="1.1.0",
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/redoc"
 )
 
-# --- MIDDLEWARE: CORS ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -97,8 +73,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# --- API ENDPOINTS (остаются без изменений) ---
 
 @app.post("/api/predict_rul", response_model=PredictionResponse, tags=["Прогноз RUL"]) 
 async def predict_rul_endpoint(request: PredictionRequest):
@@ -119,7 +93,6 @@ async def get_unit_history(unit_id: int):
     try:
         data_response = await httpx_client.get(f"{cfg.DATA_SERVICE_URL}/history/{unit_id}")
         data_response.raise_for_status()
-        # Теперь валидация пройдет успешно, так как модели совпадают
         return HistoryResponse(**data_response.json())
     except httpx.HTTPStatusError as e: raise HTTPException(status_code=e.response.status_code, detail=f"Data Service Error: {e.response.text}")
     except httpx.RequestError as e: raise HTTPException(status_code=503, detail=f"Невозможно подключиться к Data-сервису: {e}")

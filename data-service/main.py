@@ -18,8 +18,6 @@ global_historical_data: Optional[pd.DataFrame] = None
 df_true_test_rul: Optional[pd.DataFrame] = None 
 
 
-# --- PYDANTIC МОДЕЛИ ---
-
 class HistoryResponse(BaseModel):
     unit_id: int = Field(..., description="ID оборудования.")
     time_in_cycles: List[int] = Field(..., description="Массив временных циклов, ось X для графиков.")
@@ -35,7 +33,6 @@ class EquipmentStatusSummary(BaseModel):
     last_updated: str
 
 
-# --- Контекстный менеджер FastAPI для событий Startup/Shutdown ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Data-Service APP: Запуск сервиса. Загрузка данных...")
@@ -44,18 +41,10 @@ async def lifespan(app: FastAPI):
         
         _, global_historical_data_raw, df_true_test_rul_temp = load_data(cfg.DATA_RAW_DIR)
         
-        # --- >>>>>>>>>>>> ГЛАВНОЕ ИСПРАВЛЕНИЕ ЗДЕСЬ <<<<<<<<<<<< ---
-        # Проблема: df_true_test_rul_temp не имеет колонки 'unit_number'
-        # Решение: Добавляем ее вручную.
-        
-        # 1. Создаем DataFrame с RUL и даем колонке имя 'RUL_true'
         df_true_test_rul = df_true_test_rul_temp.copy()
         df_true_test_rul.columns = ['RUL_true']
         
-        # 2. Создаем колонку 'unit_number', нумеруя строки от 1 до N
-        # (где N - количество строк, что соответствует количеству unit'ов)
         df_true_test_rul['unit_number'] = np.arange(1, len(df_true_test_rul) + 1)
-        # --- >>>>>>>>>>>> КОНЕЦ ИСПРАВЛЕНИЯ <<<<<<<<<<<< ---
 
         global_historical_data = global_historical_data_raw.copy()
         
@@ -79,7 +68,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Предиктивная Диагностика: Data Service",
     description="Микросервис для доступа к имитации исторических данных оборудования.",
-    version="1.1.1", # Версия обновлена
+    version="1.1.1",
     lifespan=lifespan
 )
 
@@ -94,7 +83,6 @@ app.add_middleware(
 
 
 # --- API ЭНДПОИНТЫ (Data Service) ---
-# (Остальные эндпоинты остаются без изменений, так как они были написаны правильно)
 
 @app.get("/health", tags=["Утилиты"])
 async def health_check_data():
@@ -123,7 +111,6 @@ async def get_unit_history_data(unit_id: int):
 
     time_in_cycles = unit_df['time_in_cycles'].tolist()
 
-    # Теперь эта строка будет работать, так как 'unit_number' существует
     true_rul_series = df_true_test_rul[df_true_test_rul['unit_number'] == unit_id]['RUL_true']
     true_rul_val = true_rul_series.iloc[0] if not true_rul_series.empty else float(cfg.RUL_CAP)
     

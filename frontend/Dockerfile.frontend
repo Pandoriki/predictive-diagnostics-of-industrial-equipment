@@ -5,15 +5,10 @@ FROM node:20-alpine AS build_stage
 WORKDIR /app
 
 # Сначала копируем только необходимые для npm install
-# ПУТИ ИСПРАВЛЕНЫ: Указываем, что файлы лежат в папке frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 
-# Ваш метод с удалением lock-файла (если он вызывает проблемы) или `npm ci`
 RUN rm -f package-lock.json && npm install --include=optional --legacy-peer-deps && npm cache clean --force
-# АЛЬТЕРНАТИВА (предпочтительнее, если lock-файл надежен): RUN npm ci
 
-# Копируем остальной код фронтенда
-# ПУТЬ ИСПРАВЛЕН
 COPY frontend/. .
 
 # Собираем приложение Vite
@@ -26,7 +21,6 @@ FROM node:20-alpine AS production_stage
 WORKDIR /app
 
 # Копируем package.json, чтобы установить только production-зависимости
-# ПУТЬ ИСПРАВЛЕН
 COPY frontend/package.json ./
 
 # Устанавливаем ТОЛЬКО production-зависимости. 'serve' в dependencies.
@@ -40,8 +34,6 @@ COPY --from=build_stage /app/dist ./dist
 # Если возникнут проблемы с ресурсами (картинками и т.п.), раскомментируйте её
 # COPY frontend/public ./public
 
-
 EXPOSE 3000
 
-# ГЛАВНОЕ ИСПРАВЛЕНИЕ: Используем npx для запуска команды
 CMD ["npx", "serve", "-s", "dist", "-l", "3000"]

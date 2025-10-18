@@ -32,7 +32,6 @@ body {
 }
 
 /* --- ГЛОБАЛЬНОЕ СКРЫТИЕ СКРОЛЛБАРА ДЛЯ ВСЕЙ СТРАНИЦЫ --- */
-/* Нацеливаемся на <html>, так как именно он чаще всего имеет скролл */
 html {
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none;  /* IE 10+ */
@@ -86,13 +85,11 @@ body::-webkit-scrollbar {
   z-index: -1; /* Помещаем его ПОД карточку */
   
   /* Используем цвет статуса и размытие для создания "glow" эффекта */
-  background: rgb(239 68 68); /* Цвет из statusConfig (red-500) */
+  background: rgb(239 68 68);
   filter: blur(15px);
   
-  /* Наследуем скругление углов от родительской карточки */
   border-radius: inherit; 
   
-  /* АНИМИРУЕМ ТОЛЬКО ПРОЗРАЧНОСТЬ - ЭТО ОЧЕНЬ БЫСТРО */
   animation: subtle-glow 4s ease-in-out infinite;
 }
 
@@ -102,7 +99,7 @@ body::-webkit-scrollbar {
     opacity: 0;
   }
   50% {
-    opacity: 0.35; /* Пиковая яркость - очень приглушенная */
+    opacity: 0.35;
   }
   100% {
     opacity: 0;
