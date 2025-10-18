@@ -92,7 +92,6 @@ const SortButton: React.FC<{ children: React.ReactNode; onClick: () => void; the
   return <button onClick={onClick} className={`${baseClasses} ${themeClasses}`}>{children}</button>;
 };
 
-// --- НОВЫЙ КОМПОНЕНТ КНОПКИ "НАВЕРХ" ---
 const ScrollToTopButton: React.FC<{ isVisible: boolean; onClick: () => void; theme: Theme }> = ({ isVisible, onClick, theme }) => {
   return (
     <button onClick={onClick} className={`fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ease-in-out
@@ -112,9 +111,7 @@ const EquipmentListView: React.FC<EquipmentListViewProps> = ({ onSelectEquipment
   const [statusFilter, setStatusFilter] = useState<SmartFilterValue>('Все');
   const [sortConfig, setSortConfig] = useState<{ key: 'rul' | 'id'; direction: 'asc' | 'desc' }>({ key: 'rul', direction: 'asc' });
   const [isListVisible, setIsListVisible] = useState(false);
-  
-  // --- УДАЛЯЕМ ЛОГИКУ КНОПКИ "НАВЕРХ" ОТСЮДА ---
-  
+    
   const handleScrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -186,7 +183,7 @@ const EquipmentListView: React.FC<EquipmentListViewProps> = ({ onSelectEquipment
         </div>
         
         <ScrollToTopButton 
-          isVisible={isScrollButtonVisible} // <-- Используем проп от родителя
+          isVisible={isScrollButtonVisible}
           onClick={handleScrollToTop}
           theme={theme}
         />

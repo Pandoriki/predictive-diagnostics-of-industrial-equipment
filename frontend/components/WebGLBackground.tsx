@@ -8,7 +8,6 @@ interface WebGLBackgroundProps {
 const WebGLBackground: React.FC<WebGLBackgroundProps> = ({ theme }) => {
   const baseBgColor = theme === Theme.Dark ? "bg-zinc-950" : "bg-zinc-100";
   
-  // Цвет для виньетки, который мягко затемняет/осветляет края
   const vignetteStyle = theme === Theme.Dark 
     ? { backgroundImage: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.5) 100%)' }
     : { backgroundImage: 'radial-gradient(ellipse at center, transparent 60%, rgba(255,255,255,0.5) 100%)' };

@@ -1,5 +1,3 @@
-// frontend/components/GuardDashboardView.tsx
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Equipment, Status, Theme, BackendStatusSummary } from '../types';
 import { fetchStatusSummary } from '../api/apiService';
@@ -9,8 +7,6 @@ interface GuardDashboardViewProps {
     onSelectEquipment: (equipment: Equipment) => void;
     theme: Theme;
 }
-
-// --- КОНФИГУРАЦИЯ И ХЕЛПЕРЫ ---
 
 const statusConfig = {
   [Status.Critical]: { 
@@ -29,25 +25,20 @@ const adaptApiDataToEquipment = (apiData: BackendStatusSummary[]): Equipment[] =
   return apiData.map(item => ({ id: `#${item.unit_id}`, status: statusCodeToEnum[item.status_code] ?? Status.Normal, rul: item.current_rul, last_updated: item.last_updated, name: `Установка`, rulUnit: 'циклов', type: 'Газотурбинный двигатель', model: 'N/A', lastWarning: item.status_code !== 'normal' ? 'Требуется внимание' : 'Нет', degradationReason: 'Подробная информация доступна при выборе оборудования.', rulHistory: [], sensors: {}, }));
 };
 
-// 1. ИСПРАВЛЕННАЯ ФУНКЦИЯ ДЛЯ КОРРЕКТНОГО ОТОБРАЖЕНИЯ ВРЕМЕНИ
 const formatDateSafe = (timeString: string | undefined): string => {
     if (!timeString || !/^\d{2}:\d{2}:\d{2}$/.test(timeString)) {
         return '——:——:——';
     }
     try {
-        // Получаем сегодняшнюю дату в UTC
         const today = new Date();
         const year = today.getUTCFullYear();
         const month = String(today.getUTCMonth() + 1).padStart(2, '0');
         const day = String(today.getUTCDate()).padStart(2, '0');
 
-        // Создаем полную строку даты и времени в формате ISO 8601 UTC
         const utcDateString = `${year}-${month}-${day}T${timeString}Z`;
         
-        // Создаем объект Date, который теперь точно знает, что это время по UTC
         const dateInUtc = new Date(utcDateString);
 
-        // Преобразуем в локальное время пользователя
         return dateInUtc.toLocaleTimeString('ru-RU');
 
     } catch (error) {
@@ -65,8 +56,6 @@ const useClock = () => {
     return time;
 };
 
-
-// --- ДОЧЕРНИЕ UI КОМПОНЕНТЫ ---
 
 const GuardStatusCard: React.FC<{ equipment: Equipment; onSelect: () => void; justUpdated: boolean; theme: Theme }> = ({ equipment, onSelect, justUpdated, theme }) => {
     const { icon: Icon, label, barColor, textColor } = statusConfig[equipment.status];
@@ -109,8 +98,6 @@ const GuardStatusCard: React.FC<{ equipment: Equipment; onSelect: () => void; ju
     );
 };
 
-
-// --- ОСНОВНОЙ КОМПОНЕНТ ---
 
 const GuardDashboardView: React.FC<GuardDashboardViewProps> = ({ onSelectEquipment, theme }) => {
     const time = useClock();

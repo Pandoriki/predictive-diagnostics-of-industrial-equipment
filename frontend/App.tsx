@@ -3,11 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Theme, View, Equipment } from './types';
 
-// Импортируем все компоненты
 import Header from './components/Header';
 import EngineerDashboardView from './components/EngineerDashboardView'
 import EquipmentListView from './components/EquipmentListView';
-import GuardDashboardView from './components/GuardDashboardView'; // <-- Не забудьте импортировать
+import GuardDashboardView from './components/GuardDashboardView';
 import WebGLBackground from './components/WebGLBackground';
 
 function App() {
@@ -26,12 +25,11 @@ const [theme, setTheme] = useState<Theme>(Theme.Dark);
 
   const handleCloseEngineerDashboard = () => {
     setView(View.List);
-    // setSelectedEquipment(null); // Оставляем, чтобы кнопка "Инженер" оставалась активной
   };
   
   const handleLogoClick = () => {
     setView(View.List);
-    setSelectedEquipment(null); // Сбрасываем при клике на логотип
+    setSelectedEquipment(null);
   };
   useEffect(() => {
     const handleScroll = () => {
@@ -78,7 +76,7 @@ const [theme, setTheme] = useState<Theme>(Theme.Dark);
          {view === View.Engineer && selectedEquipment && (
             <EngineerDashboardView
               theme={theme}
-              initialEquipment={selectedEquipment} // <-- Передаем initialEquipment
+              initialEquipment={selectedEquipment}
               onClose={handleCloseEngineerDashboard}
             />
           )}

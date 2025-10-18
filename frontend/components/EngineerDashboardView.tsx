@@ -53,10 +53,8 @@ const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({ initialEq
     if (error) return <div className="text-center pt-20 text-xl text-red-500">{error}</div>;
 
   return (
-    // Убираем `animate-fade-in-up` с контейнера, чтобы избежать дергания при скролле
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
-      {/* --- ИЗМЕНЕНИЕ ЗДЕСЬ: Оборачиваем левую колонку в sticky-контейнер --- */}
       <div className="lg:col-span-1 lg:sticky lg:top-24 self-start">
         <div className="space-y-6 animate-fade-in-up">
             <button onClick={onClose} className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold transition-colors duration-300 ${theme === Theme.Dark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300'}`}>
@@ -82,8 +80,6 @@ const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({ initialEq
             </Card>
         </div>
       </div>
-      {/* --- КОНЕЦ ИЗМЕНЕНИЯ --- */}
-
 
       <div className="lg:col-span-2 space-y-6 animate-fade-in-up">
         <Card theme={theme} className="h-[400px]">

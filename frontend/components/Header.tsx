@@ -10,7 +10,6 @@ interface HeaderProps {
   onLogoClick: () => void;
 }
 
-// <-- Оборачиваем компонент в forwardRef
 const Header = forwardRef<HTMLDivElement, HeaderProps>(({ view, setView, theme, setTheme, onLogoClick }, ref) => {
   const toggleTheme = () => {
     setTheme(theme === Theme.Light ? Theme.Dark : Theme.Light);
@@ -28,7 +27,6 @@ const Header = forwardRef<HTMLDivElement, HeaderProps>(({ view, setView, theme, 
   };
 
   return (
-    // <-- Применяем полученный ref к основному элементу
     <header ref={ref} className={`flex items-center justify-between p-4 backdrop-blur-xl rounded-3xl border shadow-sm transition-colors duration-300 ease-in-out
                        ${theme === Theme.Dark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-zinc-50/80 border-zinc-200'}`}
     >

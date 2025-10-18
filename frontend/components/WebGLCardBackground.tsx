@@ -7,8 +7,8 @@ interface WebGLCardBackgroundProps {
 
 const WebGLCardBackground: React.FC<WebGLCardBackgroundProps> = ({ theme }) => {
   const backgroundClasses = theme === Theme.Dark
-    ? "bg-gray-950" // Очень темный фон для карточки
-    : "bg-white";   // Белый фон для светлой темы
+    ? "bg-gray-950"
+    : "bg-white";
 
   return (
     <div
